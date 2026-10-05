@@ -94,8 +94,17 @@ func TestLoadPlayAndProperties(t *testing.T) {
 	if typ, _ := e.GetString("track-list/0/type"); typ != "video" {
 		t.Fatalf("track type %q", typ)
 	}
-	if d, err := e.GetFloat("duration"); err != nil || d <= 0 || d > 2.5 {
-		t.Fatalf("duration=%v err=%v", d, err)
+	// duration can arrive a moment after file-loaded for generated sources.
+	var d float64
+	for i := 0; i < 100; i++ {
+		var err error
+		if d, err = e.GetFloat("duration"); err == nil && d > 0 {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if d <= 0 || d > 2.5 {
+		t.Fatalf("duration=%v", d)
 	}
 	// The observed property must have been delivered with a double value.
 	ev := waitEvent(t, e, EventPropertyChange, 5*time.Second)
