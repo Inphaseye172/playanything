@@ -68,11 +68,8 @@ func mpvKeyName(vk uint32) string {
 
 // mpvCharName maps a WM_CHAR code point to an mpv key name.
 func mpvCharName(ch uint32) string {
-	if ch < 0x20 || ch == 0x7F {
+	if ch <= 0x20 || ch == 0x7F { // control characters and Space are handled by WM_KEYDOWN
 		return ""
-	}
-	if ch == ' ' {
-		return "SPACE"
 	}
 	if ch == '#' {
 		return "SHARP"

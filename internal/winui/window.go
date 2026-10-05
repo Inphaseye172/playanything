@@ -177,6 +177,13 @@ func handOff(inputs []string, add bool) bool {
 func (u *ui) registerClasses() error {
 	cursor, _, _ := pLoadCursorW.Call(0, idcArrow)
 	icon, _, _ := pLoadIconW.Call(u.hinst, idiApp)
+	if icon == 0 {
+		if exe, err := os.Executable(); err == nil {
+			var lg, sm uintptr
+			shell32.NewProc("ExtractIconExW").Call(uintptr(unsafe.Pointer(utf16(exe))), 0, uintptr(unsafe.Pointer(&lg)), uintptr(unsafe.Pointer(&sm)), 1)
+			icon = lg
+		}
+	}
 	main := wndClassExW{
 		Size:      uint32(unsafe.Sizeof(wndClassExW{})),
 		Style:     csHRedraw | csVRedraw,
@@ -232,6 +239,20 @@ func (u *ui) setIcon() {
 	sy, _, _ := pGetSystemMetrics.Call(smCySmIcon)
 	big, _, _ := pLoadImageW.Call(u.hinst, idiApp, imageIcon, cx, cy, lrShared)
 	small, _, _ := pLoadImageW.Call(u.hinst, idiApp, imageIcon, sx, sy, lrShared)
+	if big == 0 || small == 0 {
+		// Whatever id the resource compiler used: take the exe's first icon group.
+		if exe, err := os.Executable(); err == nil {
+			var lg, sm uintptr
+			extract := shell32.NewProc("ExtractIconExW")
+			extract.Call(uintptr(unsafe.Pointer(utf16(exe))), 0, uintptr(unsafe.Pointer(&lg)), uintptr(unsafe.Pointer(&sm)), 1)
+			if big == 0 {
+				big = lg
+			}
+			if small == 0 {
+				small = sm
+			}
+		}
+	}
 	if big != 0 {
 		pSendMessageW.Call(u.hwnd, wmSetIcon, iconBig, big)
 	}
@@ -528,9 +549,12 @@ func orNone(s string) string {
 
 // --- window procedures ---------------------------------------------------
 
-func mainProc(hwnd uintptr, m uint32, wParam, lParam uintptr) uintptr {
+func mainProc(hwnd uintptr, mp, wParam, lParam uintptr) uintptr {
+	m := uint32(mp)
 	u := current
-	if u == nil || (u.hwnd != 0 && hwnd != u.hwnd) {
+	// Creation-time messages arrive before the handle is stored and before the
+	// player exists; they get default handling.
+	if u == nil || u.hwnd == 0 || hwnd != u.hwnd || u.p == nil {
 		r, _, _ := pDefWindowProcW.Call(hwnd, uintptr(m), wParam, lParam)
 		return r
 	}
@@ -643,16 +667,16 @@ func mainProc(hwnd uintptr, m uint32, wParam, lParam uintptr) uintptr {
 	return r
 }
 
-func videoProc(hwnd uintptr, m uint32, wParam, lParam uintptr) uintptr {
-	switch m {
+func videoProc(hwnd uintptr, mp, wParam, lParam uintptr) uintptr {
+	switch uint32(mp) {
 	case wmEraseBkgnd:
 		return 1
 	case wmSize:
-		if u := current; u != nil {
+		if u := current; u != nil && u.video == hwnd {
 			u.fitEngineWindow()
 		}
 	}
-	r, _, _ := pDefWindowProcW.Call(hwnd, uintptr(m), wParam, lParam)
+	r, _, _ := pDefWindowProcW.Call(hwnd, mp, wParam, lParam)
 	return r
 }
 

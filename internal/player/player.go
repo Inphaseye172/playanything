@@ -222,6 +222,7 @@ func New(opts Options) (*Player, error) {
 	// Settings that must win over the config file are applied after init.
 	if !opts.OSC {
 		_ = e.SetProperty("osc", false)
+		_ = e.Command("script-message", "osc-visibility", "never", "no_osd")
 	}
 	if !opts.Headless {
 		_ = e.SetProperty("force-window", "yes")
