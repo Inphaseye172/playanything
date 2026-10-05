@@ -1,11 +1,19 @@
 name: Release
 
-# Cut a release by pushing a tag:  git tag v1.0.0 && git push origin v1.0.0
-# The installers always fetch the "latest" release, so tagging is all it takes.
+# Two ways to cut a release:
+#   1. Push a tag:            git tag v1.0.0 && git push origin v1.0.0
+#   2. Actions tab -> Release -> "Run workflow" and type the tag (e.g. v1.0.0);
+#      the tag is created on the chosen branch's head when the release is published.
+# The installers always fetch the "latest" release.
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to create (e.g. v0.1.0)"
+        required: true
+        default: "v0.1.0"
 
 permissions:
   contents: write
@@ -25,13 +33,22 @@ jobs:
           go-version-file: go.mod
           check-latest: true
           cache: false
+      - name: Resolve tag
+        id: ver
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          case "$TAG" in v[0-9]*) ;; *) echo "tag must look like v1.2.3, got '$TAG'"; exit 1;; esac
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
       - run: go test ./...
       - name: Build all targets
-        run: make cross VERSION=${GITHUB_REF_NAME}
+        run: make cross VERSION=${{ steps.ver.outputs.tag }}
       - name: Attach installers to the release too
         run: cp install/install.ps1 install/install.sh install/uninstall.ps1 install/uninstall.sh dist/
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: PlayAnything ${{ steps.ver.outputs.tag }}
           files: dist/*
           generate_release_notes: true
           body: |

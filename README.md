@@ -169,7 +169,7 @@ make test         # unit tests + IPC/daemon tests against a local mpv when insta
 make cross        # dist/ for windows/macos/linux × amd64/arm64
 ```
 
-Releases are produced by `.github/workflows/release.yml` when a `v*` tag is pushed; the installers always fetch the latest release.
+Releases are produced by `.github/workflows/release.yml` when a `v*` tag is pushed, or from the Actions tab ("Release" → "Run workflow" → type the tag); the installers always fetch the latest release.
 
 ## FAQ
 
