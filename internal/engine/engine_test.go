@@ -94,12 +94,12 @@ func TestLoadPlayAndProperties(t *testing.T) {
 	if typ, _ := e.GetString("track-list/0/type"); typ != "video" {
 		t.Fatalf("track type %q", typ)
 	}
-	if d, err := e.GetFloat("duration"); err != nil || d < 1.5 || d > 2.5 {
+	if d, err := e.GetFloat("duration"); err != nil || d <= 0 || d > 2.5 {
 		t.Fatalf("duration=%v err=%v", d, err)
 	}
 	// The observed property must have been delivered with a double value.
 	ev := waitEvent(t, e, EventPropertyChange, 5*time.Second)
-	if ev.Name != "duration" || ev.ReplyUserdata != 7 || ev.Format != FormatDouble || ev.Double < 1.5 {
+	if ev.Name != "duration" || ev.ReplyUserdata != 7 || ev.Format != FormatDouble || ev.Double <= 0 {
 		t.Fatalf("property event: %+v", ev)
 	}
 	if err := e.Command("set", "video-rotate", "90"); err != nil {

@@ -27,6 +27,7 @@ local function exe()
 end
 
 mp.add_hook("on_load", 50, function()
+    if mp.get_opt("pa-native") == "yes" then return end -- PlayAnything's own player does this in-process
     local path = mp.get_property("stream-open-filename", "")
     if path == "" or path:find("://") then return end
     if not RAW_EXTS[ext_of(path)] then return end

@@ -296,14 +296,15 @@ func (l *Library) VersionString() string {
 
 // Engine is one libmpv core instance.
 type Engine struct {
-	lib    *Library
-	h      uintptr
-	events chan Event
-	stop   chan struct{}
-	done   chan struct{}
-	once   sync.Once
-	mu     sync.Mutex
-	closed bool
+	lib     *Library
+	h       uintptr
+	events  chan Event
+	stop    chan struct{}
+	done    chan struct{}
+	once    sync.Once
+	mu      sync.Mutex
+	closed  bool
+	started bool // pump running (Init succeeded)
 }
 
 // New creates an uninitialised core. Set options, then call Init.
@@ -339,6 +340,9 @@ func (e *Engine) Init() error {
 	if err := e.errf(e.lib.initialize(e.h), "mpv_initialize"); err != nil {
 		return err
 	}
+	e.mu.Lock()
+	e.started = true
+	e.mu.Unlock()
 	go e.pump()
 	return nil
 }
@@ -478,10 +482,13 @@ func (e *Engine) Close() {
 	e.once.Do(func() {
 		e.mu.Lock()
 		e.closed = true
+		started := e.started
 		e.mu.Unlock()
 		close(e.stop)
-		e.lib.wakeup(e.h)
-		<-e.done
+		if started {
+			e.lib.wakeup(e.h)
+			<-e.done
+		}
 		e.lib.terminateDestroy(e.h)
 		close(e.events)
 	})
