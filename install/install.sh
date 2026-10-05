@@ -46,6 +46,8 @@ fetch() { # url dest
 as_root() {
   if [ "$(id -u)" = 0 ]; then "$@"
   elif have sudo; then
+    # stdin is this script when piped into sh; let sudo prompt on the terminal
+    # shellcheck disable=SC2024
     if [ -r /dev/tty ]; then sudo "$@" </dev/tty; else sudo -n "$@"; fi
   elif have doas; then doas "$@"
   else return 1; fi
@@ -109,7 +111,7 @@ if [ -z "$MPV" ]; then
     fi
     if ! have mpv && have flatpak; then
       step "Installing mpv from Flathub (flatpak)"
-      flatpak install -y --user flathub io.mpv.Mpv && MPV="flatpak:io.mpv.Mpv" || warn "flatpak failed"
+      if flatpak install -y --user flathub io.mpv.Mpv; then MPV="flatpak:io.mpv.Mpv"; else warn "flatpak failed"; fi
     fi
   fi
   if have mpv; then MPV=$(command -v mpv)
@@ -156,7 +158,7 @@ Version=1.0
 Name=PlayAnything
 GenericName=Media Player
 Comment=One click, any media: video, audio, photos, camera RAW - local, NAS or cloud
-Exec=$EXE %U
+Exec="$EXE" %U
 TryExec=$EXE
 Icon=playanything
 Terminal=false
@@ -168,16 +170,20 @@ MimeType=$MIMES;
 
 [Desktop Action append]
 Name=Add to PlayAnything playlist
-Exec=$EXE --append %U
+Exec="$EXE" --append %U
 DESKTOP
     cat >"$ICONS/playanything.svg" <<'SVG'
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1e2a3a"/><stop offset="1" stop-color="#0b1220"/></linearGradient></defs><rect x="16" y="16" width="224" height="224" rx="52" fill="url(#g)"/><circle cx="128" cy="128" r="82" fill="none" stroke="#3ddc97" stroke-width="10" opacity="0.9"/><path d="M106 86 L170 128 L106 170 Z" fill="#ffffff"/></svg>
 SVG
-    have update-desktop-database && update-desktop-database "$APPS" 2>/dev/null || true
-    have gtk-update-icon-cache && gtk-update-icon-cache -q -t "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor" 2>/dev/null || true
+    if have update-desktop-database; then update-desktop-database "$APPS" 2>/dev/null || true; fi
+    if have gtk-update-icon-cache; then gtk-update-icon-cache -q -t "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor" 2>/dev/null || true; fi
     if have xdg-mime; then
       # shellcheck disable=SC2046
-      xdg-mime default playanything.desktop $("$EXE" mimetypes) 2>/dev/null && ok "PlayAnything is now the default for $(echo "$MIMES" | tr ';' '\n' | wc -l | tr -d ' ') MIME types" || warn "xdg-mime could not set defaults; use your file manager's 'Open With > Set as default'"
+      if xdg-mime default playanything.desktop $("$EXE" mimetypes) 2>/dev/null; then
+        ok "PlayAnything is now the default for $(echo "$MIMES" | tr ';' '\n' | wc -l | tr -d ' ') MIME types"
+      else
+        warn "xdg-mime could not set defaults; use your file manager's 'Open With > Set as default'"
+      fi
     fi
     ok "menu entry + right-click 'Open With' available"
   else
@@ -253,7 +259,11 @@ RestartSec=2
 [Install]
 WantedBy=graphical-session.target
 UNIT
-    systemctl --user daemon-reload && systemctl --user enable --now playanything.service && ok "systemd user service enabled (systemctl --user status playanything)" || warn "systemctl --user failed; start it manually with: $EXE daemon &"
+    if systemctl --user daemon-reload && systemctl --user enable --now playanything.service; then
+      ok "systemd user service enabled (systemctl --user status playanything)"
+    else
+      warn "systemctl --user failed; start it manually with: $EXE daemon &"
+    fi
   elif [ "$GOOS" = darwin ]; then
     LA="$HOME/Library/LaunchAgents"; mkdir -p "$LA"
     PLIST="$LA/com.playanything.daemon.plist"

@@ -11,24 +11,31 @@ $Root   = Join-Path $env:LOCALAPPDATA 'PlayAnything'
 $Bin    = Join-Path $Root 'bin'
 $Exe    = Join-Path $Bin 'playanything.exe'
 $ProgId = 'PlayAnything.Media'
-$classes = 'HKCU:\Software\Classes'
 
 Write-Host "Removing PlayAnything..." -ForegroundColor Cyan
 if (Test-Path $Exe) { & $Exe stop | Out-Null }
 Get-Process playanything -ErrorAction SilentlyContinue | Stop-Process -Force
 
-Remove-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'PlayAnything'
-Remove-Item -Recurse -Force "$classes\$ProgId"
-Remove-Item -Recurse -Force "$classes\Applications\playanything.exe"
-Remove-Item -Recurse -Force "$classes\*\shell\PlayAnything"
-Remove-Item -Recurse -Force "$classes\*\shell\PlayAnythingAppend"
-Remove-Item -Recurse -Force "$classes\Directory\shell\PlayAnything"
-Remove-Item -Recurse -Force "$classes\Directory\Background\shell\PlayAnything"
-Remove-Item -Recurse -Force 'HKCU:\Software\PlayAnything'
-Remove-ItemProperty 'HKCU:\Software\RegisteredApplications' -Name 'PlayAnything'
-Get-ChildItem $classes | Where-Object { $_.PSChildName -like '.*' } | ForEach-Object {
-    $k = "$($_.PSPath)\OpenWithProgids"
-    if (Test-Path $k) { Remove-ItemProperty $k -Name $ProgId }
+$HKCU = [Microsoft.Win32.Registry]::CurrentUser
+function Remove-RegKey([string]$Path) { try { $HKCU.DeleteSubKeyTree($Path, $false) } catch {} }
+function Remove-RegValue([string]$Path, [string]$Name) {
+    try { $k = $HKCU.OpenSubKey($Path, $true); if ($k) { $k.DeleteValue($Name, $false); $k.Close() } } catch {}
+}
+Remove-RegValue 'Software\Microsoft\Windows\CurrentVersion\Run' 'PlayAnything'
+Remove-RegKey "Software\Classes\$ProgId"
+Remove-RegKey 'Software\Classes\Applications\playanything.exe'
+Remove-RegKey 'Software\Classes\*\shell\PlayAnything'
+Remove-RegKey 'Software\Classes\*\shell\PlayAnythingAppend'
+Remove-RegKey 'Software\Classes\Directory\shell\PlayAnything'
+Remove-RegKey 'Software\Classes\Directory\Background\shell\PlayAnything'
+Remove-RegKey 'Software\PlayAnything'
+Remove-RegValue 'Software\RegisteredApplications' 'PlayAnything'
+$classesKey = $HKCU.OpenSubKey('Software\Classes')
+if ($classesKey) {
+    foreach ($name in $classesKey.GetSubKeyNames()) {
+        if ($name.StartsWith('.')) { Remove-RegValue "Software\Classes\$name\OpenWithProgids" $ProgId }
+    }
+    $classesKey.Close()
 }
 Remove-Item (Join-Path ([Environment]::GetFolderPath('Programs')) 'PlayAnything.lnk') -Force
 

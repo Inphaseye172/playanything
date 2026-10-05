@@ -86,11 +86,13 @@ function Find-Mpv {
         "$env:USERPROFILE\scoop\apps\mpv\current\mpv.exe",
         "$env:ProgramData\chocolatey\bin\mpv.exe"
     )
-    $wg = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
-    if (Test-Path $wg) {
-        $cands += Get-ChildItem $wg -Filter mpv.exe -Recurse -ErrorAction SilentlyContinue | ForEach-Object FullName
-    }
     foreach ($p in $cands) { if ($p -and (Test-Path $p)) { return $p } }
+    foreach ($dir in @((Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'), (Join-Path $env:LOCALAPPDATA 'Programs'), $env:ProgramFiles, ${env:ProgramFiles(x86)})) {
+        if ($dir -and (Test-Path $dir)) {
+            $hit = Get-ChildItem -Path $dir -Filter mpv.exe -Recurse -Depth 3 -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($hit) { return $hit.FullName }
+        }
+    }
     return $null
 }
 
@@ -162,61 +164,63 @@ if ($env:PLAYANYTHING_SERVICE -eq '1') {
 # ---------------------------------------------------------------- 4. associations
 if ($env:PLAYANYTHING_NO_ASSOC -ne '1') {
     Step "Registering file types and context menu (current user only)"
-    $exts = (& $Exe extensions) -split '\s+' | Where-Object { $_ }
-    $classes = 'HKCU:\Software\Classes'
+    $exts = (& $Exe extensions | Out-String) -split '\s+' | Where-Object { $_ }
+    if ($exts.Count -lt 100) { throw "playanything.exe did not return its extension list (got $($exts.Count)); aborting registration" }
     $cmdOpen   = "`"$Exe`" `"%1`""
     $cmdAppend = "`"$Exe`" --append `"%1`""
+    $iconRef   = "`"$Exe`",0"
 
-    # ProgID
-    New-Item -Force "$classes\$ProgId\shell\open\command" | Out-Null
-    New-Item -Force "$classes\$ProgId\DefaultIcon" | Out-Null
-    Set-ItemProperty "$classes\$ProgId" -Name '(Default)' -Value 'Media file'
-    Set-ItemProperty "$classes\$ProgId" -Name 'FriendlyTypeName' -Value 'Media file (PlayAnything)'
-    Set-ItemProperty "$classes\$ProgId\DefaultIcon" -Name '(Default)' -Value "`"$Exe`",0"
-    Set-ItemProperty "$classes\$ProgId\shell" -Name '(Default)' -Value 'open'
-    Set-ItemProperty "$classes\$ProgId\shell\open" -Name 'FriendlyAppName' -Value 'PlayAnything'
-    Set-ItemProperty "$classes\$ProgId\shell\open" -Name 'Icon' -Value "`"$Exe`",0"
-    Set-ItemProperty "$classes\$ProgId\shell\open\command" -Name '(Default)' -Value $cmdOpen
+    # Registry helpers via .NET: PowerShell's registry provider treats the
+    # literal key name "*" (HKCU\Software\Classes\*) as a wildcard, so
+    # New-Item/Set-ItemProperty cannot be used safely for context menus.
+    $HKCU = [Microsoft.Win32.Registry]::CurrentUser
+    function Set-RegValue([string]$Path, [string]$Name, [string]$Value) {
+        $k = $HKCU.CreateSubKey($Path, $true)
+        try { $k.SetValue($Name, $Value, [Microsoft.Win32.RegistryValueKind]::String) } finally { $k.Close() }
+    }
+    function Set-RegDefault([string]$Path, [string]$Value) { Set-RegValue $Path '' $Value }
+
+    # ProgID used by "Open with" and Default apps
+    $pid_ = "Software\Classes\$ProgId"
+    Set-RegDefault "$pid_" 'Media file'
+    Set-RegValue   "$pid_" 'FriendlyTypeName' 'Media file (PlayAnything)'
+    Set-RegDefault "$pid_\DefaultIcon" $iconRef
+    Set-RegDefault "$pid_\shell" 'open'
+    Set-RegValue   "$pid_\shell\open" 'FriendlyAppName' 'PlayAnything'
+    Set-RegValue   "$pid_\shell\open" 'Icon' $iconRef
+    Set-RegDefault "$pid_\shell\open\command" $cmdOpen
 
     # Applications\playanything.exe so "Open with" shows a friendly name
-    New-Item -Force "$classes\Applications\playanything.exe\shell\open\command" | Out-Null
-    Set-ItemProperty "$classes\Applications\playanything.exe" -Name 'FriendlyAppName' -Value 'PlayAnything'
-    Set-ItemProperty "$classes\Applications\playanything.exe\shell\open\command" -Name '(Default)' -Value $cmdOpen
+    Set-RegValue   'Software\Classes\Applications\playanything.exe' 'FriendlyAppName' 'PlayAnything'
+    Set-RegDefault 'Software\Classes\Applications\playanything.exe\shell\open\command' $cmdOpen
 
     # Default Programs capabilities (Settings > Apps > Default apps > PlayAnything)
-    $cap = 'HKCU:\Software\PlayAnything\Capabilities'
-    New-Item -Force "$cap\FileAssociations" | Out-Null
-    Set-ItemProperty $cap -Name 'ApplicationName' -Value 'PlayAnything'
-    Set-ItemProperty $cap -Name 'ApplicationDescription' -Value 'One click, any media: video, audio, photos, camera RAW - local, NAS or cloud, GPU accelerated.'
-    Set-ItemProperty $cap -Name 'ApplicationIcon' -Value "`"$Exe`",0"
-    New-Item -Force 'HKCU:\Software\RegisteredApplications' | Out-Null
-    Set-ItemProperty 'HKCU:\Software\RegisteredApplications' -Name 'PlayAnything' -Value 'Software\PlayAnything\Capabilities'
+    $cap = 'Software\PlayAnything\Capabilities'
+    Set-RegValue $cap 'ApplicationName' 'PlayAnything'
+    Set-RegValue $cap 'ApplicationDescription' 'One click, any media: video, audio, photos, camera RAW - local, NAS or cloud, GPU accelerated.'
+    Set-RegValue $cap 'ApplicationIcon' $iconRef
+    Set-RegValue 'Software\RegisteredApplications' 'PlayAnything' $cap
 
     $n = 0
     foreach ($e in $exts) {
-        $key = "$classes\.$e\OpenWithProgids"
-        New-Item -Force $key | Out-Null
-        Set-ItemProperty $key -Name $ProgId -Value ''
-        Set-ItemProperty "$cap\FileAssociations" -Name ".$e" -Value $ProgId
+        Set-RegValue "Software\Classes\.$e\OpenWithProgids" $ProgId ''
+        Set-RegValue "$cap\FileAssociations" ".$e" $ProgId
         $n++
     }
     Ok "$n extensions registered for Open with / Default apps"
 
     # Right-click menu: every file, folders, folder background
-    foreach ($base in @("$classes\*\shell\PlayAnything", "$classes\Directory\shell\PlayAnything")) {
-        New-Item -Force "$base\command" | Out-Null
-        Set-ItemProperty $base -Name 'MUIVerb' -Value 'Play with PlayAnything'
-        Set-ItemProperty $base -Name 'Icon' -Value "`"$Exe`",0"
-        Set-ItemProperty "$base\command" -Name '(Default)' -Value $cmdOpen
+    foreach ($base in @('Software\Classes\*\shell\PlayAnything', 'Software\Classes\Directory\shell\PlayAnything')) {
+        Set-RegValue   $base 'MUIVerb' 'Play with PlayAnything'
+        Set-RegValue   $base 'Icon' $iconRef
+        Set-RegDefault "$base\command" $cmdOpen
     }
-    New-Item -Force "$classes\*\shell\PlayAnythingAppend\command" | Out-Null
-    Set-ItemProperty "$classes\*\shell\PlayAnythingAppend" -Name 'MUIVerb' -Value 'Add to PlayAnything playlist'
-    Set-ItemProperty "$classes\*\shell\PlayAnythingAppend" -Name 'Icon' -Value "`"$Exe`",0"
-    Set-ItemProperty "$classes\*\shell\PlayAnythingAppend\command" -Name '(Default)' -Value $cmdAppend
-    New-Item -Force "$classes\Directory\Background\shell\PlayAnything\command" | Out-Null
-    Set-ItemProperty "$classes\Directory\Background\shell\PlayAnything" -Name 'MUIVerb' -Value 'Play this folder with PlayAnything'
-    Set-ItemProperty "$classes\Directory\Background\shell\PlayAnything" -Name 'Icon' -Value "`"$Exe`",0"
-    Set-ItemProperty "$classes\Directory\Background\shell\PlayAnything\command" -Name '(Default)' -Value "`"$Exe`" `"%V`""
+    Set-RegValue   'Software\Classes\*\shell\PlayAnythingAppend' 'MUIVerb' 'Add to PlayAnything playlist'
+    Set-RegValue   'Software\Classes\*\shell\PlayAnythingAppend' 'Icon' $iconRef
+    Set-RegDefault 'Software\Classes\*\shell\PlayAnythingAppend\command' $cmdAppend
+    Set-RegValue   'Software\Classes\Directory\Background\shell\PlayAnything' 'MUIVerb' 'Play this folder with PlayAnything'
+    Set-RegValue   'Software\Classes\Directory\Background\shell\PlayAnything' 'Icon' $iconRef
+    Set-RegDefault 'Software\Classes\Directory\Background\shell\PlayAnything\command' "`"$Exe`" `"%V`""
     Ok "right-click 'Play with PlayAnything' added for files and folders"
 
     try {

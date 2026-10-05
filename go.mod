@@ -1,3 +1,3 @@
 module github.com/inphaseye172/playanything
 
-go 1.22
+go 1.23
