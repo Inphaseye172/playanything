@@ -24,8 +24,8 @@ else
   CFG="$HOME/Library/Application Support/PlayAnything"; CACHE="$HOME/Library/Caches/PlayAnything"
 fi
 rm -f "$EXE"
-for rc in "$HOME/.profile" "$HOME/.bashrc" "$HOME/.zshrc"; do
-  [ -f "$rc" ] && grep -v "# added by PlayAnything" "$rc" >"$rc.tmp" && mv "$rc.tmp" "$rc"
+for rc in "$HOME/.profile" "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.zprofile"; do
+  if [ -f "$rc" ]; then { grep -v "# added by PlayAnything" "$rc" || :; } >"$rc.tmp" && mv "$rc.tmp" "$rc"; fi
 done
 if [ "${PLAYANYTHING_PURGE:-0}" = 1 ]; then
   rm -rf "$CFG" "$CACHE"

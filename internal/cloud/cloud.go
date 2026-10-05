@@ -29,8 +29,10 @@ type Info struct {
 	Detail        string // platform-specific note for `playanything info`
 }
 
-// Remote reports whether reading the file will involve the network.
-func (i Info) Remote() bool { return i.IsOffline || i.IsPlaceholder || i.IsNetwork }
+// Remote reports whether reading the file will involve the network: dataless
+// placeholders and network shares. A placeholder whose bytes are cached or
+// pinned locally reads at disk speed.
+func (i Info) Remote() bool { return i.IsOffline || i.IsNetwork }
 
 // Describe returns a short human sentence for OSD / terminal use.
 func (i Info) Describe() string {

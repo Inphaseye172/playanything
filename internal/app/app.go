@@ -93,6 +93,12 @@ func (a *App) Play(ctx context.Context, inputs []string, opt PlayOptions) error 
 
 	scriptOpts := map[string]string{"pa-exe": a.Self}
 	perFile := map[string][]string{}
+	var feedback *session // window opened early for download / render feedback
+	defer func() {
+		if feedback != nil {
+			feedback.close()
+		}
+	}()
 
 	// Cloud / network awareness for the first file (that is the one the user clicked).
 	first := files[0]
@@ -111,14 +117,7 @@ func (a *App) Play(ctx context.Context, inputs []string, opt PlayOptions) error 
 			if err != nil {
 				return err
 			}
-			if s != nil {
-				// A window is already up showing the download; play in it.
-				defer s.close()
-				if err := s.load(files, opt.Append, perFile); err != nil {
-					return err
-				}
-				return nil
-			}
+			feedback = s // a window is already up showing the download; play in it later
 		}
 	}
 
@@ -143,9 +142,12 @@ func (a *App) Play(ctx context.Context, inputs []string, opt PlayOptions) error 
 		}
 	}
 	if len(special) > 0 {
-		resolved, err := a.resolveCinemaRaw(ctx, special, opt, scriptOpts)
+		resolved, s, err := a.resolveCinemaRaw(ctx, special, opt, scriptOpts, feedback)
 		if err != nil {
 			return err
+		}
+		if s != nil {
+			feedback = s
 		}
 		if len(resolved) == 0 && len(normal) == 0 {
 			return nil // handed off to an external player
@@ -154,6 +156,10 @@ func (a *App) Play(ctx context.Context, inputs []string, opt PlayOptions) error 
 		files = normal
 	}
 
+	// A feedback window is already open: play there.
+	if feedback != nil {
+		return feedback.load(files, opt.Append, perFile)
+	}
 	// Prefer the background player when it is around.
 	if s := a.connectDaemon(opt.NoDaemon); s != nil {
 		defer s.close()
@@ -254,8 +260,10 @@ func (a *App) run(args []string) error {
 	a.Log("exec: %s %s", a.MPV.Path, strings.Join(args, " "))
 	var errBuf bytes.Buffer
 	if a.Wait && !a.GUI {
-		cmd.Stdin, cmd.Stdout = os.Stdin, os.Stdout
-		cmd.Stderr = os.Stderr
+		if runtime.GOOS != "windows" {
+			cmd.Stdin = os.Stdin // the terminal's keys go to mpv while it runs
+		}
+		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("mpv exited: %w", err)
 		}
@@ -365,17 +373,13 @@ func (a *App) RawPreview(path string) (string, int, error) {
 }
 
 // resolveCinemaRaw maps R3D/BRAW inputs to something mpv can play, or opens
-// them in the vendor's player. Returns the playable substitutes.
-func (a *App) resolveCinemaRaw(ctx context.Context, files []string, opt PlayOptions, scriptOpts map[string]string) ([]string, error) {
+// them in the vendor's player. It returns the playable substitutes and, when a
+// window was opened (or reused) for rendering feedback, that session so the
+// caller plays everything in it.
+func (a *App) resolveCinemaRaw(ctx context.Context, files []string, opt PlayOptions, scriptOpts map[string]string, s *session) ([]string, *session, error) {
 	tools := red.Detect(a.Cfg.REDlinePath)
 	cache := filepath.Join(a.Paths.Cache, "r3d-proxies")
 	var playable []string
-	var s *session // window used for rendering feedback; proxies are loaded into it at the end
-	defer func() {
-		if s != nil {
-			s.close() // drops the IPC connection only; the window stays
-		}
-	}()
 	for _, f := range files {
 		kind := media.ByExtension(f)
 		name := filepath.Base(f)
@@ -391,7 +395,7 @@ func (a *App) resolveCinemaRaw(ctx context.Context, files []string, opt PlayOpti
 					if s == nil {
 						var err error
 						if s, err = a.startIdle(ctx, scriptOpts, opt.MPVArgs); err != nil {
-							return nil, err
+							return nil, nil, err
 						}
 					}
 				}
@@ -410,7 +414,7 @@ func (a *App) resolveCinemaRaw(ctx context.Context, files []string, opt PlayOpti
 				}
 				if err != nil {
 					s.osd("REDline failed: "+err.Error(), 10000)
-					return nil, err
+					return nil, s, err
 				}
 				playable = append(playable, p)
 				continue
@@ -418,32 +422,25 @@ func (a *App) resolveCinemaRaw(ctx context.Context, files []string, opt PlayOpti
 			if tools.REDCINEX != "" {
 				a.Log("opening %s in REDCINE-X PRO", name)
 				if err := red.OpenWith(tools.REDCINEX, f); err != nil {
-					return nil, err
+					return nil, s, err
 				}
 				continue
 			}
 			ui.Error(a.GUI, fmt.Sprintf("%s is REDCODE RAW (R3D).\n\nFFmpeg cannot decode R3D; it needs RED's SDK. Install the free REDCINE-X PRO (which includes the REDline tool) and PlayAnything will render a proxy automatically next time:\n%s\n\nSee docs/RED-R3D.md for details.", name, redDownloadURL()))
-			return nil, nil
+			return nil, s, nil
 		case media.BRAW:
 			if tools.BRAWApp != "" {
 				a.Log("opening %s in Blackmagic RAW Player", name)
 				if err := red.OpenWith(tools.BRAWApp, f); err != nil {
-					return nil, err
+					return nil, s, err
 				}
 				continue
 			}
 			ui.Error(a.GUI, fmt.Sprintf("%s is Blackmagic RAW.\n\nFFmpeg cannot decode BRAW; it needs Blackmagic's SDK. Install the free Blackmagic RAW Player and PlayAnything will open .braw files with it:\n%s", name, red.BRAWURL))
-			return nil, nil
+			return nil, s, nil
 		}
 	}
-	if s != nil && len(playable) > 0 {
-		// We already have a window up (rendering feedback). Load the proxies into it.
-		if err := s.load(playable, opt.Append, nil); err != nil {
-			return nil, err
-		}
-		return nil, nil
-	}
-	return playable, nil
+	return playable, s, nil
 }
 
 func redDownloadURL() string {

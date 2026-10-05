@@ -24,6 +24,9 @@
   Uninstall:
       irm https://raw.githubusercontent.com/inphaseye172/playanything/main/install/uninstall.ps1 | iex
 #>
+# Everything runs inside a script block so `irm | iex` leaves no variables,
+# functions or preference changes behind in your session.
+& {
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072 } catch {}
@@ -43,10 +46,21 @@ Write-Host "Installing to $Root" -ForegroundColor DarkGray
 New-Item -ItemType Directory -Force -Path $Bin | Out-Null
 
 # ---------------------------------------------------------------- 1. launcher
-$arch  = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'amd64' }
+$archRaw = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
+$arch  = if ($archRaw -eq 'ARM64') { 'arm64' } else { 'amd64' }
 $asset = "playanything-windows-$arch.exe"
 $ver   = $env:PLAYANYTHING_VERSION
 $url   = if ($ver) { "https://github.com/$Repo/releases/download/$ver/$asset" } else { "https://github.com/$Repo/releases/latest/download/$asset" }
+
+# A previous install may still be running (background player, open window):
+# Windows cannot overwrite a running exe, but it can be renamed out of the way.
+if (Test-Path $Exe) {
+    try { & $Exe stop 2>$null | Out-Null } catch {}
+    Get-Process playanything -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $Exe } | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 300
+    try { Move-Item -Force $Exe "$Exe.old" } catch {}
+    Remove-Item -Force "$Exe.old" -ErrorAction SilentlyContinue
+}
 
 Step "Downloading PlayAnything ($asset)"
 $downloaded = $false
@@ -64,9 +78,12 @@ try {
 if (-not $downloaded) {
     if (Get-Command go -ErrorAction SilentlyContinue) {
         Step "Building from source with Go"
-        $env:CGO_ENABLED = '0'
-        $env:GOBIN = $Bin
-        & go install -ldflags '-s -w -H windowsgui' "github.com/$Repo/cmd/playanything@main"
+        $oldCgo = $env:CGO_ENABLED; $oldGoBin = $env:GOBIN
+        try {
+            $env:CGO_ENABLED = '0'
+            $env:GOBIN = $Bin
+            & go install -ldflags '-s -w -H windowsgui' "github.com/$Repo/cmd/playanything@main"
+        } finally { $env:CGO_ENABLED = $oldCgo; $env:GOBIN = $oldGoBin }
         if (-not (Test-Path $Exe)) { throw "go install did not produce $Exe" }
         Ok "built $Exe"
     } else {
@@ -261,4 +278,8 @@ Write-Host @"
   * Drag files onto the player window, or run:  playanything <file|folder|url>
 
 "@ -ForegroundColor Gray
-if ($env:PLAYANYTHING_SET_DEFAULT -eq '1') { Start-Process 'ms-settings:defaultapps' }
+if ($env:PLAYANYTHING_SET_DEFAULT -eq '1') {
+    Step "Making PlayAnything the default for every supported file type"
+    Invoke-Expression (Invoke-RestMethod "https://raw.githubusercontent.com/$Repo/main/install/set-default.ps1" -UseBasicParsing)
+}
+}

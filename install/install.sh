@@ -92,9 +92,12 @@ fi
 
 if [ -z "$MPV" ]; then
   if [ "$GOOS" = darwin ]; then
-    if have brew; then
+    BREW=$(command -v brew 2>/dev/null || true)
+    [ -n "$BREW" ] || { [ -x /opt/homebrew/bin/brew ] && BREW=/opt/homebrew/bin/brew; } || true
+    [ -n "$BREW" ] || { [ -x /usr/local/bin/brew ] && BREW=/usr/local/bin/brew; } || true
+    if [ -n "$BREW" ]; then
       step "Installing mpv with Homebrew"
-      brew install mpv </dev/tty >/dev/null 2>&1 || brew install mpv
+      "$BREW" install mpv </dev/tty >/dev/null 2>&1 || "$BREW" install mpv
     else
       warn "Homebrew not found. Install mpv from https://mpv.io/installation/ (e.g. the mpv.app bundle into /Applications), or install Homebrew first: https://brew.sh"
     fi
@@ -128,10 +131,17 @@ case ":$PATH:" in
   *":$BIN:"*) ;;
   *)
     LINE="export PATH=\"$BIN:\$PATH\"  # added by PlayAnything"
-    for rc in "$HOME/.profile" "$HOME/.bashrc" "$HOME/.zshrc"; do
-      if [ -f "$rc" ] && ! grep -Fq "# added by PlayAnything" "$rc"; then printf '\n%s\n' "$LINE" >>"$rc"; fi
+    touched=0
+    for rc in "$HOME/.profile" "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.zprofile"; do
+      if [ -f "$rc" ]; then
+        touched=1
+        grep -Fq "# added by PlayAnything" "$rc" || printf '\n%s\n' "$LINE" >>"$rc"
+      fi
     done
-    [ -f "$HOME/.profile" ] || printf '%s\n' "$LINE" >>"$HOME/.profile"
+    if [ "$touched" = 0 ]; then
+      # No rc file yet: create the one the login shell reads (zsh on macOS).
+      case "$(basename "${SHELL:-sh}")" in zsh) printf '%s\n' "$LINE" >>"$HOME/.zprofile" ;; *) printf '%s\n' "$LINE" >>"$HOME/.profile" ;; esac
+    fi
     export PATH="$BIN:$PATH"
     ok "added $BIN to PATH in your shell profile (open a new terminal)"
     ;;
@@ -190,7 +200,8 @@ SVG
     step "Creating PlayAnything.app for Finder (double-click / Open With)"
     APPDIR="$HOME/Applications"; mkdir -p "$APPDIR"
     APP="$APPDIR/PlayAnything.app"
-    TMPSCPT=$(mktemp -t playanything.XXXXXX).applescript
+    TMPD=$(mktemp -d -t playanything.XXXXXX)
+    TMPSCPT="$TMPD/PlayAnything.applescript"
     cat >"$TMPSCPT" <<APPLESCRIPT
 on open theItems
 	set args to ""
@@ -234,7 +245,7 @@ APPLESCRIPT
     else
       warn "osacompile failed; skipping the .app bundle (the command line still works)"
     fi
-    rm -f "$TMPSCPT"
+    rm -rf "$TMPD"
   fi
 fi
 
@@ -275,7 +286,7 @@ UNIT
   <key>Label</key><string>com.playanything.daemon</string>
   <key>ProgramArguments</key><array><string>$EXE</string><string>daemon</string></array>
   <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
   <key>ProcessType</key><string>Interactive</string>
   <key>StandardOutPath</key><string>/tmp/playanything-daemon.log</string>
   <key>StandardErrorPath</key><string>/tmp/playanything-daemon.log</string>

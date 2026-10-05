@@ -12,7 +12,7 @@
     <string>daemon</string>
   </array>
   <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
   <key>ProcessType</key><string>Interactive</string>
   <key>StandardOutPath</key><string>/tmp/playanything-daemon.log</string>
   <key>StandardErrorPath</key><string>/tmp/playanything-daemon.log</string>

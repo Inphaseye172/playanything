@@ -66,7 +66,9 @@ func Find(override, managedDir string) (Binary, error) {
 			return b, nil
 		}
 	}
-	if p, err := exec.LookPath("mpv"); err == nil {
+	// Look up the exact file name: on Windows a bare "mpv" would resolve the
+	// console helper mpv.com first and flash a console window.
+	if p, err := exec.LookPath(exe); err == nil {
 		return Binary{Path: p, Origin: "PATH"}, nil
 	}
 	for _, c := range candidates() {

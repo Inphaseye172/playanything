@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -112,9 +113,17 @@ func Develop(ctx context.Context, dev RawDeveloper, cacheDir, in string) (string
 		}
 		cmd.Stdout = stdoutFile
 	}
-	outBytes, runErr := cmd.CombinedOutput()
+	var outBytes []byte
+	var runErr error
 	if stdoutFile != nil {
+		// dcraw writes the image to stdout (-c); only stderr carries messages.
+		var errBuf bytes.Buffer
+		cmd.Stderr = &errBuf
+		runErr = cmd.Run()
 		stdoutFile.Close()
+		outBytes = errBuf.Bytes()
+	} else {
+		outBytes, runErr = cmd.CombinedOutput()
 	}
 	if runErr != nil {
 		os.Remove(tmp)

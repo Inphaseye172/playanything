@@ -16,6 +16,11 @@ import (
 // through a pipe, mpv's Lua hook reading `raw-preview`, redirection to a file)
 // are left untouched: only missing handles are pointed at the console.
 func platformInit() bool {
+	if os.Getenv("PLAYANYTHING_DETACHED") != "" {
+		// Spawned as a background process: stay off the parent's console so
+		// closing that terminal does not send us CTRL_CLOSE_EVENT.
+		return true
+	}
 	kernel32 := syscall.NewLazyDLL("kernel32.dll")
 	attach := kernel32.NewProc("AttachConsole")
 	const attachParentProcess = ^uintptr(0) // (DWORD)-1

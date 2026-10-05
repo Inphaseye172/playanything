@@ -171,6 +171,9 @@ func removeSocketFile(ipcPath string) {
 // Spawn starts `playanything daemon` detached, for config daemon="always".
 func Spawn(self string, extraArgs ...string) error {
 	cmd := exec.Command(self, append([]string{"daemon"}, extraArgs...)...)
+	// Tell the child not to attach to our console: otherwise closing the
+	// terminal that spawned it would take the background player down.
+	cmd.Env = append(os.Environ(), "PLAYANYTHING_DETACHED=1")
 	detach(cmd)
 	if err := cmd.Start(); err != nil {
 		return err

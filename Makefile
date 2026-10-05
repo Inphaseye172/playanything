@@ -30,7 +30,7 @@ cross: clean
 	GOOS=darwin  GOARCH=arm64 go build -trimpath -ldflags '$(LDFLAGS)' -o dist/playanything-darwin-arm64 ./cmd/playanything
 	GOOS=linux   GOARCH=amd64 go build -trimpath -ldflags '$(LDFLAGS)' -o dist/playanything-linux-amd64 ./cmd/playanything
 	GOOS=linux   GOARCH=arm64 go build -trimpath -ldflags '$(LDFLAGS)' -o dist/playanything-linux-arm64 ./cmd/playanything
-	cd dist && sha256sum * > SHA256SUMS
+	cd dist && (command -v sha256sum >/dev/null && sha256sum * || shasum -a 256 *) > SHA256SUMS
 
 # Install for the current user from a local checkout (same layout as install.sh).
 install: build

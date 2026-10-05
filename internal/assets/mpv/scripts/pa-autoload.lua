@@ -99,3 +99,4 @@ local function autoload()
 end
 
 mp.register_event("file-loaded", autoload)
+mp.register_event("end-file", function() done_for = nil end)

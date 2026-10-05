@@ -255,8 +255,9 @@ func Sniff(b []byte) Kind {
 		return Audio // could be Theora video; mpv handles both so this only affects the window hint
 	case has(4, "ftypM4A ") || has(4, "ftypM4B "):
 		return Audio
-	case len(b) >= 2 && b[0] == 0xFF && (b[1]&0xE0) == 0xE0 && (b[1]&0x06) != 0:
-		return Audio // raw MPEG audio frame sync (mp3/mp2/aac-adts)
+	case len(b) >= 4 && b[0] == 0xFF && (b[1]&0xE0) == 0xE0 && (b[1]&0x06) != 0 && (b[1]>>3)&3 != 1 &&
+		b[1] != 0xFE && b[2]>>4 != 0 && b[2]>>4 != 0xF && (b[2]>>2)&3 != 3:
+		return Audio // raw MPEG audio frame sync (mp3/mp2/aac-adts) with valid header fields
 	// --- Video containers
 	case has(0, "\x1aE\xdf\xa3"):
 		return Video // EBML (Matroska / WebM)

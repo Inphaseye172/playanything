@@ -15,7 +15,7 @@ var files embed.FS
 
 // Revision is bumped whenever the embedded files change in a way that should
 // overwrite what is on disk. The installer stores it in .pa-assets-rev.
-const Revision = "5"
+const Revision = "6"
 
 const stampName = ".pa-assets-rev"
 

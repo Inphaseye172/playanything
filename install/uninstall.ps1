@@ -6,6 +6,7 @@
   mpv itself is left installed (it may be used by other programs); remove it with
   `winget uninstall shinchiro.mpv` if you installed it only for PlayAnything.
 #>
+& {
 $ErrorActionPreference = 'SilentlyContinue'
 $Root   = Join-Path $env:LOCALAPPDATA 'PlayAnything'
 $Bin    = Join-Path $Root 'bin'
@@ -15,6 +16,11 @@ $ProgId = 'PlayAnything.Media'
 Write-Host "Removing PlayAnything..." -ForegroundColor Cyan
 if (Test-Path $Exe) { & $Exe stop | Out-Null }
 Get-Process playanything -ErrorAction SilentlyContinue | Stop-Process -Force
+# A clip opened without the background player leaves our private portable mpv
+# running; Windows cannot delete a running exe.
+$mpvBin = Join-Path $Root 'mpv-bin'
+Get-Process mpv -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($mpvBin, [StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force
+Start-Sleep -Milliseconds 300
 
 $HKCU = [Microsoft.Win32.Registry]::CurrentUser
 function Remove-RegKey([string]$Path) { try { $HKCU.DeleteSubKeyTree($Path, $false) } catch {} }
@@ -57,3 +63,4 @@ try {
     [PlayAnything.Shell]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)
 } catch {}
 Write-Host "PlayAnything removed." -ForegroundColor Green
+}

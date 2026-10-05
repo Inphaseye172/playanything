@@ -11,3 +11,6 @@
 Thumbs.db
 .idea/
 .vscode/
+
+# Generated Windows resources (make rsrc) and icons built from assets/icon/source.png
+cmd/playanything/*.syso

@@ -24,12 +24,15 @@ jobs:
           go-version-file: go.mod
           check-latest: true
           cache: false
-      - name: Install mpv and ffmpeg for integration tests
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq mpv ffmpeg
+      - name: Install mpv, libmpv and ffmpeg for integration tests
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq mpv libmpv2 ffmpeg
       - name: gofmt
         run: test -z "$(gofmt -l cmd internal)" || (gofmt -l cmd internal; exit 1)
       - run: go vet ./...
-      - run: go test -race ./...
+      - name: go test (the race detector needs cgo; shipped binaries stay pure Go)
+        run: go test -race ./...
+        env:
+          CGO_ENABLED: "1"
 
   cross:
     name: Cross-compile all targets
@@ -53,11 +56,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: shellcheck
-        run: sudo apt-get install -y -qq shellcheck && shellcheck -s sh install/install.sh install/uninstall.sh
+        run: sudo apt-get install -y -qq shellcheck && shellcheck -s sh install/*.sh
       - name: PowerShell syntax
         shell: pwsh
         run: |
-          foreach ($f in 'install/install.ps1','install/uninstall.ps1') {
+          foreach ($f in (Get-ChildItem install/*.ps1 | ForEach-Object FullName)) {
             $tokens = $null; $errors = $null
             [System.Management.Automation.Language.Parser]::ParseFile($f, [ref]$tokens, [ref]$errors) | Out-Null
             if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_.ToString() }; exit 1 }
