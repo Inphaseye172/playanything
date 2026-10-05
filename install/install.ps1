@@ -7,9 +7,10 @@
       irm https://raw.githubusercontent.com/inphaseye172/playanything/main/install/install.ps1 | iex
 
   What it does (everything lives under %LOCALAPPDATA%\PlayAnything):
-    1. Downloads playanything.exe (the launcher) from the latest GitHub release
-    2. Installs mpv, the playback engine, if it is not already present
-       (winget shinchiro.mpv -> scoop -> chocolatey -> portable download)
+    1. Downloads the PlayAnything app bundle (playanything.exe + its built-in
+       playback engine libmpv-2.dll) from the latest GitHub release
+    2. Falls back to the bare launcher + a separately installed mpv only when
+       the bundle cannot be downloaded
     3. Writes PlayAnything's tuned mpv profile (GPU decode, HDR, network cache, RAW previews)
     4. Registers "Play with PlayAnything" in the right-click menu for every file and folder,
        adds PlayAnything to "Open with" for 230+ media extensions and to Settings > Default apps
@@ -49,8 +50,10 @@ New-Item -ItemType Directory -Force -Path $Bin | Out-Null
 $archRaw = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
 $arch  = if ($archRaw -eq 'ARM64') { 'arm64' } else { 'amd64' }
 $asset = "playanything-windows-$arch.exe"
+$bundle = "playanything-windows-$arch.zip"
 $ver   = $env:PLAYANYTHING_VERSION
-$url   = if ($ver) { "https://github.com/$Repo/releases/download/$ver/$asset" } else { "https://github.com/$Repo/releases/latest/download/$asset" }
+$base  = if ($ver) { "https://github.com/$Repo/releases/download/$ver" } else { "https://github.com/$Repo/releases/latest/download" }
+$url   = "$base/$asset"
 
 # A previous install may still be running (background player, open window):
 # Windows cannot overwrite a running exe, but it can be renamed out of the way.
@@ -62,9 +65,25 @@ if (Test-Path $Exe) {
     Remove-Item -Force "$Exe.old" -ErrorAction SilentlyContinue
 }
 
-Step "Downloading PlayAnything ($asset)"
+Step "Downloading PlayAnything (${bundle}: the app with its built-in playback engine)"
 $downloaded = $false
+$Dll = Join-Path $Bin 'libmpv-2.dll'
 try {
+    $zip = Join-Path $Root 'bundle.zip'
+    Invoke-WebRequest -Uri "$base/$bundle" -OutFile $zip -UseBasicParsing
+    if ((Get-Item $zip).Length -lt 5MB) { throw "bundle too small" }
+    Expand-Archive -Path $zip -DestinationPath $Bin -Force
+    Remove-Item $zip -Force
+    if (-not (Test-Path $Exe) -or -not (Test-Path $Dll)) { throw "bundle incomplete" }
+    Unblock-File $Exe -ErrorAction SilentlyContinue
+    Unblock-File $Dll -ErrorAction SilentlyContinue
+    $downloaded = $true
+    Ok "app: $Exe"
+    Ok "engine: $Dll"
+} catch {
+    Warn "Bundle not available ($($_.Exception.Message)); falling back to the bare launcher + external mpv"
+}
+if (-not $downloaded) { try {
     Invoke-WebRequest -Uri $url -OutFile "$Exe.tmp" -UseBasicParsing
     if ((Get-Item "$Exe.tmp").Length -lt 1MB) { throw "download too small" }
     Move-Item -Force "$Exe.tmp" $Exe
@@ -74,7 +93,7 @@ try {
 } catch {
     Remove-Item -Force "$Exe.tmp" -ErrorAction SilentlyContinue
     Warn "Release download failed: $($_.Exception.Message)"
-}
+} }
 if (-not $downloaded) {
     if (Get-Command go -ErrorAction SilentlyContinue) {
         Step "Building from source with Go"
@@ -113,7 +132,12 @@ function Find-Mpv {
     return $null
 }
 
-Step "Checking for mpv (the playback engine)"
+$mpv = $null
+if (Test-Path $Dll) {
+    Step "Playback engine"
+    Ok "embedded engine present (libmpv-2.dll); no separate mpv install needed"
+} else {
+Step "Checking for mpv (legacy external engine)"
 $mpv = Find-Mpv
 if ($mpv) { Ok "found $mpv" }
 
@@ -158,6 +182,7 @@ if (-not $mpv) {
     throw "mpv could not be installed automatically. Install it from https://mpv.io/installation/ (or: winget install -e --id shinchiro.mpv) and run this installer again."
 }
 Ok "mpv: $mpv"
+}
 
 # ---------------------------------------------------------------- 3. PATH + profile
 Step "Configuring"
@@ -170,9 +195,12 @@ if (($userPath -split ';') -notcontains $Bin) {
 $env:Path = "$env:Path;$Bin"
 
 & $Exe setup | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
-if (-not (Get-Command mpv.exe -ErrorAction SilentlyContinue)) {
+if (Test-Path $Dll) {
+    & $Exe config engine embedded | Out-Null
+} elseif ($mpv -and -not (Get-Command mpv.exe -ErrorAction SilentlyContinue)) {
+    & $Exe config engine external | Out-Null
     & $Exe config mpv_path "$mpv" | Out-Null
-    Ok "mpv path saved to config.json"
+    Ok "external mpv path saved to config.json"
 }
 if ($env:PLAYANYTHING_SERVICE -eq '1') {
     & $Exe config daemon always | Out-Null

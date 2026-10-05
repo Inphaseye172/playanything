@@ -8,9 +8,13 @@ playanything info <file>     # what is this file and what would happen
 PLAYANYTHING_DEBUG=1 playanything <file>   # print the exact mpv command line
 ```
 
-## "mpv not found"
+## "playback engine (libmpv) not found" / "mpv not found"
 
-PlayAnything is a launcher; mpv does the playing. Install it:
+On Windows the engine (`libmpv-2.dll`) lives next to `playanything.exe`
+(`%LOCALAPPDATA%\PlayAnything\bin`). Re-run the installer to restore it, or set
+`PLAYANYTHING_LIBMPV` to a copy of the DLL. `playanything doctor` lists where it looked.
+
+In launcher mode (`engine=external`, and macOS/Linux today) a separately installed mpv does the playing. Install it:
 
 - Windows: `winget install -e --id shinchiro.mpv` (or re-run `install.ps1`,
   which also falls back to scoop/choco/portable download)
@@ -75,7 +79,8 @@ installer, so it is not notarized. Right-click → Open once, or
 
 ## The background player
 
-`playanything config daemon never` disables it; `always` starts it on demand;
+Windows: not needed, the app is single-instance (a second open goes to the running window).
+macOS/Linux launcher mode: `playanything config daemon never` disables it; `always` starts it on demand;
 `auto` (default) uses it only when already running. `playanything stop` ends it.
 Logs: `systemctl --user status playanything` (Linux), `/tmp/playanything-daemon.log`
 (macOS), or run `playanything daemon` in a terminal to watch it.

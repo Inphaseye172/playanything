@@ -40,8 +40,23 @@ jobs:
           case "$TAG" in v[0-9]*) ;; *) echo "tag must look like v1.2.3, got '$TAG'"; exit 1;; esac
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
       - run: go test ./...
-      - name: Build all targets
-        run: make cross VERSION=${{ steps.ver.outputs.tag }}
+      - name: Fetch the playback engine for Windows (libmpv, shinchiro build)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sudo apt-get install -y -qq p7zip-full jq zip
+          rel=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/latest)
+          for pair in "amd64:x86_64" "arm64:aarch64"; do
+            arch=${pair%%:*}; triple=${pair##*:}
+            url=$(echo "$rel" | jq -r --arg t "$triple" '.assets[] | select(.name | test("^mpv-dev-" + $t + "-[0-9]{8}-git-[0-9a-f]+\\.7z$")) | .browser_download_url' | head -1)
+            if [ -z "$url" ] || [ "$url" = null ]; then echo "no mpv-dev build for $triple"; continue; fi
+            echo "libmpv for $arch: $url"
+            curl -fsSL -o "mpv-dev-$arch.7z" "$url"
+            mkdir -p "libmpv/$arch" && 7z x -y -o"libmpv/$arch" "mpv-dev-$arch.7z" libmpv-2.dll >/dev/null
+            ls -la "libmpv/$arch"
+          done
+      - name: Build all targets and the Windows bundles
+        run: make windows-bundle VERSION=${{ steps.ver.outputs.tag }}
       - name: Attach installers to the release too
         run: cp install/*.ps1 install/*.sh dist/
       - uses: softprops/action-gh-release@v2
@@ -62,4 +77,4 @@ jobs:
             ```sh
             curl -fsSL https://raw.githubusercontent.com/inphaseye172/playanything/main/install/install.sh | sh
             ```
-            Binaries below are static, dependency-free launchers; mpv is installed separately by the installer.
+            `playanything-windows-amd64.zip` is the complete Windows app (PlayAnything + its embedded playback engine). The bare binaries are the launcher only.

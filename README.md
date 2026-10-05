@@ -1,8 +1,8 @@
 <h1 align="center">PlayAnything</h1>
 
 <p align="center"><b>One click, any media.</b><br>
-A tiny, fast, GPU-accelerated launcher that plays <i>every</i> video, audio, photo and camera-RAW file —
-on your disk, on your NAS, or sitting as a cloud placeholder in Synology Drive / OneDrive — in one window, instantly.</p>
+A native, lightweight player from <b>Anchor Point Studio</b> that opens <i>every</i> video, audio, photo and camera-RAW file —
+on your disk, on your NAS, or sitting as a cloud placeholder in Synology Drive / OneDrive — in its own window, instantly, GPU accelerated.</p>
 
 <p align="center">
 <code>MKV</code> <code>MP4</code> <code>MOV</code> <code>MXF</code> <code>WebM</code> <code>AVI</code> <code>TS/M2TS</code> ·
@@ -29,101 +29,107 @@ irm https://raw.githubusercontent.com/inphaseye172/playanything/main/install/ins
 curl -fsSL https://raw.githubusercontent.com/inphaseye172/playanything/main/install/install.sh | sh
 ```
 
-That installs the 4 MB `playanything` launcher, installs [mpv](https://mpv.io) (the playback engine) if you
-don't have it, writes a tuned player profile, and wires up your desktop:
+On Windows that installs the complete app (about 70 MB: `playanything.exe` plus its built-in playback engine), writes the
+tuned player profile, and wires up your desktop: right-click any file or folder → **Play with PlayAnything**; *Open with*
+for 230+ extensions; *Settings → Default apps*; Start Menu shortcut; `playanything` on your PATH. Nothing else to install.
 
-- **Windows:** right-click any file or folder → **Play with PlayAnything**; appears in *Open with* for 230+ extensions and in
-  *Settings → Default apps*; Start Menu shortcut; `playanything` on your PATH.
-- **Linux:** `.desktop` entry registered as default for 130+ MIME types (video/audio/image/camera-raw).
-- **macOS:** `~/Applications/PlayAnything.app` for Finder's *Open With* / double-click.
+Make it the default for **every** supported file type in one go:
 
-Want it to run as a background service (one always-ready window, instant opens, playlist queueing)?
-Set `PLAYANYTHING_SERVICE=1` before running the installer — see [Background player](#background-player-service-mode).
+```powershell
+irm https://raw.githubusercontent.com/inphaseye172/playanything/main/install/set-default.ps1 | iex
+```
 
 Uninstall: same URLs with `uninstall.ps1` / `uninstall.sh`.
 
-## Why this exists
+## What you get
 
-| The problem | What PlayAnything does |
-|---|---|
-| Explorer/Finder show **no preview** for files on Synology Drive On-demand Sync, OneDrive Files On-Demand, Dropbox online-only, SMB shares — "it's not a true local file" | Detects cloud placeholders (`RECALL_ON_DATA_ACCESS`, `SF_DATALESS`) and network mounts, **opens the window instantly**, tells you it's downloading, and streams through a 512 MiB RAM cache while the sync client fetches the bytes. Optional `--hydrate-first` with a progress bar. [Details](docs/CLOUD-AND-NETWORK.md) |
-| Camera RAW photos (ARW, CR2, CR3, NEF, DNG, RAF, ORF, RW2, PEF…) **won't open** in a media player | Extracts the camera's **embedded full-size JPEG preview** in ~10 ms (TIFF/EXIF parsing + whole-file JPEG scan), rotates per EXIF, caches it, and shows it — flip through a card of 500 RAWs with `→`. Optional true demosaic via darktable/RawTherapee/LibRaw with `--raw-full`. |
-| 10-bit HEVC, HDR, AV1, 8K, ProRes, DNxHR, 5.1 stems, NVIDIA ShadowPlay recordings with **multiple audio tracks** | mpv + FFmpeg + libplacebo: every codec, GPU decode (`hwdec=auto-safe`), 10-bit output, HDR passthrough or tone-mapping, audio track list on screen, `a` to switch. |
-| **RED R3D / Blackmagic RAW** need the vendor SDK; nothing open-source decodes them | Honest handling: renders a proxy once with RED's free `REDline` (if installed) and plays it, or hands off to REDCINE-X PRO / Blackmagic RAW Player, or tells you exactly what to install. [Details](docs/RED-R3D.md) |
-| Players are heavy, phone-home, nag, or have installers that need admin | Single static Go binary, no runtime, no telemetry, per-user install, MIT licensed. mpv is the only dependency. |
+- **Its own window.** Title bar, menus, a clean control bar (play, time, seek, volume, audio/subtitle track pickers, fullscreen),
+  keyboard shortcuts, drag & drop, one reusable window (opening a second file goes to the running window), Esc/F fullscreen,
+  always-on-top, DPI-aware. The Anchor Point Studio icon on the taskbar and in Explorer.
+- **Every format.** 232 registered extensions. H.264, HEVC 8/10/12-bit (HDR10/HLG), AV1, VP9, ProRes, DNxHR, MJPEG, Cineform, MPEG-2,
+  VC-1 … FLAC, ALAC, DSD, Opus, TrueHD, DTS-HD … JPEG, PNG, HEIC, AVIF, JPEG XL, EXR, TIFF, PSD … See [docs/FORMATS.md](docs/FORMATS.md).
+- **GPU decoding and 10-bit/HDR output.** D3D11VA/NVDEC on Windows, VAAPI/NVDEC on Linux, VideoToolbox on macOS; HDR passthrough on HDR
+  displays, tone-mapping otherwise. Press `I` to see the decoder in use.
+- **Multiple audio tracks** (NVIDIA ShadowPlay separate tracks, OBS multi-track, dual-language): listed on screen when the file opens,
+  `A` cycles, the **A** button on the control bar picks.
+- **Cloud and NAS files that other players choke on.** Synology Drive On-demand Sync, OneDrive Files On-Demand, Dropbox online-only and
+  SMB shares are detected (`RECALL_ON_DATA_ACCESS`, `SF_DATALESS`, network mounts). The window opens instantly, says it is downloading, and
+  streams through a 512 MiB cache while the sync client fetches bytes. [Details](docs/CLOUD-AND-NETWORK.md).
+- **Camera RAW photos open like JPEGs.** ARW, CR2, CR3, NEF, DNG, RAF, ORF, RW2, PEF, SRW, 3FR, IIQ … the camera's embedded full-size
+  JPEG is extracted in-process in milliseconds, rotated per EXIF, cached. Page through a whole card with `→`. True demosaic optional
+  (`--raw-full`, darktable/RawTherapee/LibRaw).
+- **RED R3D and Blackmagic RAW**, honestly handled: nothing open-source can decode them. With RED's free REDline installed, PlayAnything
+  renders a proxy once (progress on screen) and plays it; otherwise it hands the clip to REDCINE-X PRO or Blackmagic RAW Player, or
+  tells you exactly what to install. [Details](docs/RED-R3D.md).
+- **Light.** A single 5 MB Go executable plus the engine library. No runtime, no telemetry, per-user install, MIT licensed.
 
-\* R3D and BRAW cannot be decoded by any open-source software; see [docs/RED-R3D.md](docs/RED-R3D.md) for what PlayAnything does instead.
+\* see [docs/RED-R3D.md](docs/RED-R3D.md).
 
 ## Usage
 
-Double-click a file, drag files onto the player window, or:
+Double-click a file, right-click → *Play with PlayAnything*, drag files onto the window, or:
 
 ```sh
-playanything movie.mkv                    # play
-playanything ./DCIM/100MSDCF              # play a whole folder (natural sort)
+playanything movie.mkv                    # play (opens in the running window if one exists)
+playanything ./DCIM/100MSDCF              # a whole folder, natural order
 playanything "https://example.com/a.mp4"  # stream
-playanything --append song.flac           # add to the running player's playlist
-playanything --hydrate-first big.mov      # download the cloud placeholder fully first
-playanything --raw-full DSC01234.ARW      # true RAW development instead of embedded preview
+playanything --append song.flac           # queue after the current playlist
+playanything --hydrate-first big.mov      # download a cloud placeholder fully first
+playanything --raw-full DSC01234.ARW      # true RAW development instead of the embedded preview
 playanything -f clip.mp4                  # fullscreen
-playanything clip.mp4 -- --start=60 --volume=50   # anything after -- goes to mpv
 
 playanything info clip.mkv                # what is it? local/cloud? which tracks? what will happen?
-playanything doctor                       # mpv version, GPU decoders, config paths, optional tools
+playanything doctor                       # engine version, GPU decoders, config paths, optional tools
 playanything config daemon always         # settings (see below)
 ```
 
-### Keys (on top of mpv's defaults)
+### Keys
 
 | Key | Action |
 |---|---|
-| `Space` / `←` `→` / `.` `,` | pause / seek 5 s / frame step |
-| `a` `A` · `Ctrl+a` | next / previous audio track · list tracks |
-| `s` `v` | next subtitle · toggle subtitles |
-| `<` `>` · `PgUp` `PgDn` | previous / next file in folder |
-| `r` `R` · `Ctrl+wheel` · `0` | rotate photo · zoom · reset |
-| `f` `Enter` · double-click | fullscreen |
-| `Ctrl+s` `Alt+s` | screenshot (to Desktop) |
-| `i` · `Ctrl+h` · `d` | stats (shows hwdec in use) · toggle GPU decoding · deinterlace |
-| `[` `]` `BS` | slower / faster / normal speed |
-| `q` | quit |
+| `Space` · `←` `→` · `↑` `↓` · `.` `,` | pause · seek 5 s · seek 1 min · frame step |
+| `A` `Shift+A` · `Ctrl+A` | next / previous audio track · list tracks |
+| `S` `V` | next subtitle · toggle subtitles |
+| `PgUp` `PgDn` | previous / next file in folder |
+| `R` · `Ctrl+wheel` · `0` | rotate photo · zoom · reset |
+| `F` `Enter` `Alt+Enter` · double-click · `Esc` | fullscreen · leave fullscreen |
+| `Ctrl+O` · `Ctrl+Shift+O` · `Ctrl+B` | open · add to playlist · hide controls |
+| `Ctrl+S` · `I` · `Ctrl+H` · `D` | screenshot (Desktop) · stats · toggle GPU decoding · deinterlace |
+| `[` `]` `Backspace` · `Q` | slower / faster / normal · quit |
 
-## What it plays
+## How it is built
 
-Everything FFmpeg knows plus camera RAW. Short version:
+PlayAnything is a Go application with no cgo and no UI toolkit:
 
-- **Video:** MKV, MP4, MOV, WebM, AVI, WMV, FLV, MPEG-TS/M2TS, VOB, MXF, GXF, DV, OGV, RM, 3GP, raw H.264/HEVC/AV1 streams… with H.264, HEVC 8/10/12-bit (HDR10/HLG), AV1, VP9, VP8, MPEG-2, VC-1, ProRes, DNxHD/HR, Cineform, MJPEG, JPEG 2000…
-- **Audio:** MP3, AAC, FLAC, ALAC, WAV/W64/BWF, AIFF, Ogg Vorbis, Opus, WMA, APE, WavPack, TTA, TAK, Musepack, DSD (DSF/DFF), AC-3/E-AC-3, DTS/DTS-HD, TrueHD, AMR, tracker modules…
-- **Images:** JPEG, PNG, GIF, WebP, BMP, TIFF, TGA, PSD, HEIC/HEIF, AVIF, JPEG XL, JPEG 2000, OpenEXR, Radiance HDR, DDS, DPX, PNM…
-- **Camera RAW (30 extensions):** Sony ARW/SRF/SR2 · Canon CR2/CR3/CRW · Nikon NEF/NRW · Adobe DNG · GoPro GPR · Fujifilm RAF · Olympus ORF · Panasonic RW2/RWL · Pentax PEF · Samsung SRW · Hasselblad 3FR/FFF · Phase One IIQ · Leaf MOS · Mamiya MEF · Minolta MRW · Epson ERF · Kodak KDC/DCR · Sigma X3F
-- **Cinema RAW:** RED R3D and Blackmagic BRAW via the vendors' free tools (see above).
-- **Playlists & streams:** M3U/M3U8/PLS, HTTP(S), RTSP, RTMP, SRT, UDP…
+```
+cmd/playanything          CLI + Windows entry point (GUI subsystem; attaches to your terminal when run from one)
+internal/winui            native Win32 window: video surface, control bar (GDI), menus, keys, drag & drop, single instance, fullscreen
+internal/player           the player: folder playlists, RAW preview hook, cloud awareness, R3D proxies, tracks, typed events
+internal/engine           the embedded playback engine: libmpv (FFmpeg + libplacebo) loaded at runtime via purego
+internal/rawpreview       camera-RAW embedded-JPEG extraction (TIFF/EXIF walk + format-agnostic scan), ~10 ms per 40 MB
+internal/cloud            Synology/OneDrive/Dropbox placeholder + network-share detection, hydration with progress
+internal/media            232 extensions, magic-byte sniffing, natural sort, MIME table
+internal/red              REDline / REDCINE-X / Blackmagic RAW Player integration
+internal/assets           the engine profile: mpv.conf (gpu-next, hwdec=auto-safe, HDR, big network cache), input.conf, Lua helpers
+install/                  one-line installers, default-app scripts, service units
+```
 
-Full tables with codec/GPU notes: [docs/FORMATS.md](docs/FORMATS.md). `playanything extensions` prints the 232 registered extensions.
+**About the engine.** Decoding H.264, HEVC, AV1, ProRes and the rest is the job of FFmpeg, and rendering 10-bit/HDR correctly is the
+job of libplacebo. PlayAnything embeds them through **libmpv**, the library form of mpv, loaded from the app folder
+(`libmpv-2.dll` on Windows). There is no separate mpv program, no mpv window and no mpv install step: the window, controls, behaviour,
+icon and installer are PlayAnything's. Writing our own codecs would be years of work for a worse result, so that is the one piece we
+take from the open-source world, exactly as VLC, Plex, Jellyfin and Chrome do. The set-up is documented in
+[THIRD_PARTY.md](THIRD_PARTY.md).
 
-## GPU acceleration
-
-The managed `mpv.conf` uses `vo=gpu-next` (libplacebo) with `hwdec=auto-safe`, which picks the native zero-copy path per platform:
-
-| Platform | Decoder | Notes |
-|---|---|---|
-| Windows | D3D11VA (any GPU) or NVDEC | 10-bit HEVC/AV1 zero-copy into the D3D11 swapchain; HDR passthrough when Windows HDR is on |
-| Linux | VAAPI (Intel/AMD), NVDEC (NVIDIA), Vulkan | Flatpak mpv needs the matching freedesktop VAAPI extension |
-| macOS | VideoToolbox | H.264/HEVC/ProRes; AV1 on M3+ |
-
-Press `i` during playback to see `Hardware decoding: …`. Override in `user.conf` (`hwdec=nvdec`, `gpu-api=vulkan`, …).
+**Platforms.** The native window ships for Windows (x64 and ARM64). On macOS and Linux PlayAnything currently runs in launcher mode
+(it drives a separately installed mpv with the same profile, RAW previews and cloud handling); native windows for those platforms are
+the next step. `playanything config engine external` selects launcher mode on Windows too.
 
 ## Background player (service mode)
 
-Optional. With it on, PlayAnything keeps **one idle mpv** alive with an IPC socket; opening a file sends it to that window instead of starting a process. You get a single reusable window, zero start-up latency, `--append` queueing, and a right-click *Add to PlayAnything playlist* entry.
-
-```sh
-playanything daemon            # run it in the foreground (or let the installer register it)
-playanything config daemon always   # auto-start it when needed (default "auto" uses it only if running; "never" disables)
-playanything stop
-```
-
-The installers register it per user — `HKCU\…\Run` on Windows, a systemd *user* unit on Linux, a launchd agent on macOS — when `PLAYANYTHING_SERVICE=1` is set. It is a user-session process on purpose: a real Windows "service" runs in session 0 and cannot show a window. Pressing `q` closes the window; the daemon restarts an idle instance in the background.
+On Windows the app is single-instance: the first window stays open and every further open goes to it, so there is nothing to run as a
+service. On macOS/Linux launcher mode, `PLAYANYTHING_SERVICE=1` at install time registers a per-user background player (systemd
+user unit / launchd agent) for the same effect; `playanything daemon` / `playanything stop` control it.
 
 ## Configuration
 
@@ -131,60 +137,40 @@ The installers register it per user — `HKCU\…\Run` on Windows, a systemd *us
 
 | Key | Default | Meaning |
 |---|---|---|
-| `mpv_path` | auto | path to mpv if not found automatically |
-| `daemon` | `auto` | `auto` / `always` / `never` — see above |
+| `engine` | `embedded` | `embedded` (own window + built-in engine) or `external` (launch an installed mpv) |
+| `mpv_path` | auto | external engine only |
+| `daemon` | `auto` | launcher mode background player: `auto` / `always` / `never` |
 | `hydrate_first` | `false` | always download cloud placeholders fully before playing |
-| `raw_full_decode` | `false` | develop RAW with an external tool instead of the embedded preview |
-| `raw_decoder` | `auto` | `darktable-cli` / `rawtherapee-cli` / `dcraw_emu` / `dcraw` |
-| `redline_path`, `redline_args` | auto / ProRes proxy | how R3D proxies are rendered ([docs](docs/RED-R3D.md)) |
-| `use_system_mpv_config` | `false` | use your own `~/.config/mpv` instead of the managed profile |
+| `raw_full_decode`, `raw_decoder` | `false`, `auto` | develop RAW with darktable-cli / rawtherapee-cli / dcraw_emu / dcraw |
+| `redline_path`, `redline_args` | auto, ProRes proxy | how R3D proxies are rendered ([docs](docs/RED-R3D.md)) |
+| `use_system_mpv_config` | `false` | use your own `~/.config/mpv` profile instead of the managed one |
 | `fullscreen` | `false` | start fullscreen |
 
-Player tuning goes in **`user.conf`** inside the managed mpv folder (`playanything doctor` prints it). It is included after `mpv.conf` and never overwritten; any [mpv option](https://mpv.io/manual/stable/#options) works there.
-
-Directories (per user, no admin): `%LOCALAPPDATA%\PlayAnything` · `~/Library/Application Support/PlayAnything` · `~/.config/playanything` (+ `~/.cache/playanything`). Set `PLAYANYTHING_HOME` for a portable install.
-
-## How it works
-
-```
-playanything <file>
-   │  classify (extension → magic bytes)            internal/media
-   │  cloud/network status (placeholder? offline?)  internal/cloud
-   ├─ camera RAW ──► embedded JPEG + EXIF rotation ─┐ internal/rawpreview (also called by a Lua hook
-   ├─ R3D/BRAW ────► REDline proxy / vendor player ─┤ internal/red         for every playlist entry)
-   └─ everything else ─────────────────────────────┴─► mpv (direct launch, or `loadfile` to the
-                                                            background instance over JSON IPC)
-```
-
-- **Engine:** [mpv](https://mpv.io) (FFmpeg + libplacebo). PlayAnything never re-implements decoding.
-- **Profile:** `internal/assets/mpv/mpv.conf` + three small Lua scripts: `pa-rawhook.lua` (RAW → preview swap at load time), `pa-autoload.lua` (folder → playlist, natural order), `pa-osd.lua` (opening/cloud/track/error messages).
-- **Launcher:** Go, stdlib only, static binary, ~4 MB, starts in a few ms. Windows build is a GUI-subsystem exe (no console flash) that attaches to your terminal when run from one.
+Engine tuning goes in **`user.conf`** inside the profile folder (Help → *Open settings folder*, or `playanything doctor`). It is
+included after the managed `mpv.conf` and never overwritten; any [mpv option](https://mpv.io/manual/stable/#options) works there
+(`hwdec=nvdec`, `gpu-api=vulkan`, `alang=en,eng`, `screenshot-directory=…`). Environment overrides: `PLAYANYTHING_HOME` (portable
+install root), `PLAYANYTHING_LIBMPV` (engine library path), `PLAYANYTHING_MPV` (external mpv path), `PLAYANYTHING_DEBUG=1` (log).
 
 ## Building from source
 
 ```sh
 git clone https://github.com/inphaseye172/playanything && cd playanything
-make build        # ./bin/playanything
-make test         # unit tests + IPC/daemon tests against a local mpv when installed
-make cross        # dist/ for windows/macos/linux × amd64/arm64
+make build            # ./bin/playanything (Linux/macOS launcher build; Windows: GOOS=windows make build)
+make test             # unit + headless engine/player tests (needs libmpv + ffmpeg installed locally)
+make icon rsrc        # app icon from assets/icon/source.png (see assets/icon/README.md) + Windows resources
+make windows-bundle   # dist/playanything-windows-{amd64,arm64}.zip when libmpv/<arch>/libmpv-2.dll is present
 ```
 
-Releases are produced by `.github/workflows/release.yml` when a `v*` tag is pushed, or from the Actions tab ("Release" → "Run workflow" → type the tag); the installers always fetch the latest release.
-
-## FAQ
-
-**Is this a new player?** No — it is the missing glue around mpv: format/cloud/RAW-aware launching, sane defaults, OS integration, and a service mode. If you already love mpv, use `use_system_mpv_config` to keep your config and still get the RAW/cloud/R3D handling.
-
-**Can it really play R3D?** Only via RED's free tools (see [docs/RED-R3D.md](docs/RED-R3D.md)). Anyone claiming native open-source R3D playback is mistaken.
-
-**Does it change my default apps silently?** No. Windows does not allow that; the installer registers PlayAnything everywhere it can (*Open with*, *Default apps*, right-click menu) and shows you where to flip the switch. On Linux it sets `xdg-mime` defaults (undo with your file manager); on macOS use *Get Info → Change All*.
-
-**Thumbnails in Explorer for cloud files?** Out of scope — that is a shell extension problem on Microsoft's side. PlayAnything makes *opening* them one click and instant instead.
+Releases: push a `v*` tag, or run the *Release* workflow from the Actions tab with a tag name. The workflow fetches the engine DLLs,
+builds every target, zips the Windows bundles and publishes them; the installers always fetch the latest release.
 
 ## Credits & licenses
 
-PlayAnything is MIT licensed (see [LICENSE](LICENSE)). It launches [mpv](https://mpv.io) (GPLv2+/LGPLv2.1+), which bundles [FFmpeg](https://ffmpeg.org) and [libplacebo](https://libplacebo.org); on Windows the installer fetches [shinchiro's mpv builds](https://github.com/shinchiro/mpv-winbuild-cmake) via winget (`shinchiro.mpv`). REDline/REDCINE-X PRO are © RED Digital Cinema; Blackmagic RAW Player is © Blackmagic Design; neither is included.
+PlayAnything © Anchor Point Studio, MIT licensed ([LICENSE](LICENSE)). It embeds [libmpv](https://mpv.io) (mpv project,
+GPL/LGPL), which contains [FFmpeg](https://ffmpeg.org) and [libplacebo](https://libplacebo.org); Windows builds of the engine come from
+[shinchiro/mpv-winbuild-cmake](https://github.com/shinchiro/mpv-winbuild-cmake). REDline/REDCINE-X PRO are © RED Digital Cinema and
+Blackmagic RAW Player is © Blackmagic Design; neither is included. Full list: [THIRD_PARTY.md](THIRD_PARTY.md).
 
 ---
 
-<sub>Keywords: media player, one click, play any file, universal player, mkv player, mp4 player, mov player, flac player, raw photo viewer, arw viewer, cr3 viewer, nef viewer, dng viewer, r3d player, braw, 10-bit video, HDR playback, multiple audio tracks, nvidia shadowplay separate tracks, GPU accelerated video player, NVDEC, D3D11VA, VAAPI, Synology Drive on-demand sync preview, OneDrive files on-demand video, NAS video playback, SMB streaming, placeholder files, mpv frontend, mpv launcher, portable media player Windows, lightweight media player, open source media player, winget, homebrew, systemd user service.</sub>
+<sub>Keywords: media player, one click, play any file, universal player, mkv player, mp4 player, mov player, flac player, raw photo viewer, arw viewer, cr3 viewer, nef viewer, dng viewer, r3d player, braw, 10-bit video, HDR playback, multiple audio tracks, nvidia shadowplay separate tracks, GPU accelerated video player, NVDEC, D3D11VA, VAAPI, Synology Drive on-demand sync preview, OneDrive files on-demand video, NAS video playback, SMB streaming, placeholder files, lightweight media player Windows, open source media player, native Win32 player, Go media player, libmpv, Anchor Point Studio.</sub>

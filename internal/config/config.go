@@ -21,7 +21,11 @@ import (
 
 // Config is persisted as config.json. Zero values mean "auto".
 type Config struct {
-	// Path to the mpv executable. Empty = auto-detect.
+	// "embedded" (default): PlayAnything's own window with the built-in
+	// engine (libmpv loaded from the app folder). "external": launch a
+	// separately installed mpv instead (legacy mode; macOS/Linux today).
+	Engine string `json:"engine,omitempty"`
+	// Path to the mpv executable (external engine only). Empty = auto-detect.
 	MPVPath string `json:"mpv_path,omitempty"`
 	// Use the user's own ~/.config/mpv instead of PlayAnything's tuned profile.
 	UseSystemMPVConfig bool `json:"use_system_mpv_config,omitempty"`
@@ -161,6 +165,9 @@ func Load(p Paths) (*Config, error) {
 }
 
 func (c *Config) applyDefaults() {
+	if c.Engine == "" {
+		c.Engine = "embedded"
+	}
 	if c.Daemon == "" {
 		c.Daemon = "auto"
 	}

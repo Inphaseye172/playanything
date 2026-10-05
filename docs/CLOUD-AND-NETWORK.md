@@ -26,7 +26,7 @@ throttles thumbnailing on network drives and many players seek poorly over SMB.
    "Opening … ⬇ Downloading from Synology Drive — not stored locally yet", so a
    click always gets an instant response even when the bytes take seconds.
 3. **Streams while the sync client downloads.** Reading the file is what makes
-   the cloud filter driver fetch it; mpv reads it with a large RAM cache
+   the cloud filter driver fetch it; the engine reads it with a large RAM cache
    (`cache=yes`, 512 MiB read-ahead, 4 MiB reads) so playback starts as soon as
    the first chunk lands and seeking inside already-downloaded ranges is instant.
 4. Optionally **downloads first** (`--hydrate-first`, or `hydrate_first: true`

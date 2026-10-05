@@ -78,8 +78,10 @@ jobs:
           check-latest: true
           cache: false
       - run: go test ./internal/media ./internal/rawpreview ./internal/cloud ./internal/config ./internal/assets ./internal/red
-      - name: Build the release flavour (GUI subsystem, no console flash)
-        run: go build -ldflags "-H windowsgui" -o playanything-gui.exe ./cmd/playanything
+      - name: Build the release flavour (GUI subsystem, icon + manifest embedded)
+        run: |
+          go run github.com/akavel/rsrc@v0.10.2 -ico assets/icon/playanything.ico -manifest cmd/playanything/playanything.manifest -arch amd64 -o cmd/playanything/rsrc_windows_amd64.syso
+          go build -ldflags "-H windowsgui" -o playanything-gui.exe ./cmd/playanything
       - name: Build a console flavour for the smoke test
         run: go build -o playanything.exe ./cmd/playanything
       - name: Smoke test CLI

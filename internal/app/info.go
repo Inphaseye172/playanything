@@ -13,6 +13,7 @@ import (
 	"github.com/inphaseye172/playanything/internal/assets"
 	"github.com/inphaseye172/playanything/internal/cloud"
 	"github.com/inphaseye172/playanything/internal/daemon"
+	"github.com/inphaseye172/playanything/internal/engine"
 	"github.com/inphaseye172/playanything/internal/media"
 	"github.com/inphaseye172/playanything/internal/mpv"
 	"github.com/inphaseye172/playanything/internal/rawpreview"
@@ -126,10 +127,24 @@ func (a *App) Doctor(w io.Writer) error {
 	fmt.Fprintf(w, "PlayAnything %s on %s/%s\n\n", version.String(), runtime.GOOS, runtime.GOARCH)
 
 	fmt.Fprintln(w, "Engine")
+	fmt.Fprintf(w, "  · mode: %s\n", a.Cfg.Engine)
+	if lib, err := engine.Load(); err == nil {
+		fmt.Fprintf(w, "  %s embedded engine: libmpv client API %s\n      %s\n", ok(true), lib.VersionString(), lib.Path)
+	} else {
+		fmt.Fprintf(w, "  %s embedded engine: not found (%v)\n      looked in: %s\n", ok(a.Cfg.Engine == "external"), err, strings.Join(engine.Candidates(), ", "))
+	}
 	b, err := mpv.Find(a.Cfg.MPVPath, filepath.Join(a.Paths.Config, "mpv-bin"))
 	if err != nil {
-		fmt.Fprintf(w, "  %s mpv: not found. %s\n", ok(false), installHint())
-		return err
+		if a.Cfg.Engine == "external" {
+			fmt.Fprintf(w, "  %s mpv: not found. %s\n", ok(false), installHint())
+			return err
+		}
+		fmt.Fprintf(w, "  · external mpv: not installed (only needed with engine=external)\n")
+		fmt.Fprintln(w, "\nConfiguration")
+		fmt.Fprintf(w, "  · config.json:  %s\n", a.Paths.File())
+		fmt.Fprintf(w, "  · engine profile: %s\n", a.Paths.MPV)
+		fmt.Fprintf(w, "  · cache:        %s\n", a.Paths.Cache)
+		return nil
 	}
 	a.MPV = b
 	ver, _ := mpv.Version(b)

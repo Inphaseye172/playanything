@@ -251,7 +251,7 @@ func Load() (*Library, error) {
 func load() (*Library, error) {
 	var lastErr error
 	for _, c := range Candidates() {
-		h, err := purego.Dlopen(c, purego.RTLD_NOW|purego.RTLD_GLOBAL)
+		h, err := dlopen(c)
 		if err != nil {
 			lastErr = err
 			continue

@@ -49,7 +49,7 @@ Usage:
   playanything doctor                         check mpv, GPU decoders, optional tools
   playanything setup [--force]                write the managed mpv profile
   playanything raw-preview <file>             print the path of a RAW photo's embedded preview
-  playanything config [<key> [<value>]]       show or change settings (mpv_path, daemon, hydrate_first, ...)
+  playanything config [<key> [<value>]]       show or change settings (engine, mpv_path, daemon, ...)
   playanything extensions | mimetypes         list what gets registered as openable
   playanything version
 
@@ -189,6 +189,13 @@ func cmdPlay(ctx context.Context, a *app.App, args []string, gui bool) int {
 			}
 		}
 	}
+	if handled, err := runNative(a, inputs, opt); handled {
+		if err != nil {
+			ui.Error(gui, err.Error())
+			return 1
+		}
+		return 0
+	}
 	if err := a.Play(ctx, inputs, opt); err != nil {
 		msg := err.Error()
 		if err == mpv.ErrNotFound || strings.Contains(msg, "mpv not found") {
@@ -246,10 +253,12 @@ func isTerminal() bool {
 
 // cmdConfig shows or sets a config.json key: `config`, `config daemon`, `config daemon always`.
 func cmdConfig(a *app.App, args []string) int {
-	keys := []string{"mpv_path", "use_system_mpv_config", "daemon", "hydrate_first", "raw_full_decode", "raw_decoder", "redline_path", "redline_args", "fullscreen"}
+	keys := []string{"engine", "mpv_path", "use_system_mpv_config", "daemon", "hydrate_first", "raw_full_decode", "raw_decoder", "redline_path", "redline_args", "fullscreen"}
 	get := func(k string) string {
 		c := a.Cfg
 		switch k {
+		case "engine":
+			return c.Engine
 		case "mpv_path":
 			return c.MPVPath
 		case "use_system_mpv_config":
@@ -297,6 +306,12 @@ func cmdConfig(a *app.App, args []string) int {
 	b := strings.EqualFold(v, "true") || v == "1" || strings.EqualFold(v, "yes")
 	c := a.Cfg
 	switch k {
+	case "engine":
+		if v != "embedded" && v != "external" {
+			fmt.Fprintln(os.Stderr, "engine must be embedded or external")
+			return 2
+		}
+		c.Engine = v
 	case "mpv_path":
 		c.MPVPath = v
 	case "use_system_mpv_config":
