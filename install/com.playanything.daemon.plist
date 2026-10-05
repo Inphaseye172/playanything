@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- launchd agent (reference copy; install.sh writes the real one with your paths).
+     ~/Library/LaunchAgents/com.playanything.daemon.plist
+     launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.playanything.daemon.plist -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.playanything.daemon</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/you/.local/bin/playanything</string>
+    <string>daemon</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>StandardOutPath</key><string>/tmp/playanything-daemon.log</string>
+  <key>StandardErrorPath</key><string>/tmp/playanything-daemon.log</string>
+</dict>
+</plist>

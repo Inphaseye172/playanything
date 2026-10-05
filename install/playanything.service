@@ -1,0 +1,17 @@
+# systemd user unit (reference copy; install.sh writes the real one).
+#   ~/.config/systemd/user/playanything.service
+#   systemctl --user enable --now playanything
+[Unit]
+Description=PlayAnything background player (idle mpv with IPC)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/playanything daemon
+ExecStop=%h/.local/bin/playanything stop
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

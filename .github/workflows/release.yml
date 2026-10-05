@@ -1,0 +1,44 @@
+name: Release
+
+# Cut a release by pushing a tag:  git tag v1.0.0 && git push origin v1.0.0
+# The installers always fetch the "latest" release, so tagging is all it takes.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - run: go test ./...
+      - name: Build all targets
+        run: make cross VERSION=${GITHUB_REF_NAME}
+      - name: Attach installers to the release too
+        run: cp install/install.ps1 install/install.sh install/uninstall.ps1 install/uninstall.sh dist/
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            **Windows** (PowerShell):
+            ```powershell
+            irm https://raw.githubusercontent.com/inphaseye172/playanything/main/install/install.ps1 | iex
+            ```
+            **macOS / Linux**:
+            ```sh
+            curl -fsSL https://raw.githubusercontent.com/inphaseye172/playanything/main/install/install.sh | sh
+            ```
+            Binaries below are static, dependency-free launchers; mpv is installed separately by the installer.

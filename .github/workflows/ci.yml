@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (Linux, with real mpv)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - name: Install mpv and ffmpeg for integration tests
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq mpv ffmpeg
+      - name: gofmt
+        run: test -z "$(gofmt -l cmd internal)" || (gofmt -l cmd internal; exit 1)
+      - run: go vet ./...
+      - run: go test -race ./...
+
+  cross:
+    name: Cross-compile all targets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - run: make cross
+      - uses: actions/upload-artifact@v4
+        with:
+          name: playanything-dev-builds
+          path: dist/
+
+  scripts:
+    name: Lint installers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: sudo apt-get install -y -qq shellcheck && shellcheck -s sh install/install.sh install/uninstall.sh
+      - name: PowerShell syntax
+        shell: pwsh
+        run: |
+          foreach ($f in 'install/install.ps1','install/uninstall.ps1') {
+            $tokens = $null; $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($f, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_.ToString() }; exit 1 }
+            Write-Host "parsed $f OK"
+          }
+
+  windows:
+    name: Build & smoke test (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - run: go test ./internal/media ./internal/rawpreview ./internal/cloud ./internal/config ./internal/assets ./internal/red
+      - name: Build the release flavour (GUI subsystem, no console flash)
+        run: go build -ldflags "-H windowsgui" -o playanything-gui.exe ./cmd/playanything
+      - name: Build a console flavour for the smoke test
+        run: go build -o playanything.exe ./cmd/playanything
+      - name: Smoke test CLI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\playanything.exe version
+          if ((.\playanything.exe extensions).Split(' ').Count -lt 200) { throw "extension list too short" }
+          .\playanything.exe setup
+          .\playanything.exe config daemon never
+          .\playanything.exe info README.md
+
+  macos:
+    name: Build & test (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - run: go test ./...
+      - run: go build -o playanything ./cmd/playanything && ./playanything version

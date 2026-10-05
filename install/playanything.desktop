@@ -1,0 +1,21 @@
+# Reference copy. install.sh writes this file to ~/.local/share/applications/
+# with the real path and the full MimeType list from `playanything mimetypes`.
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=PlayAnything
+GenericName=Media Player
+Comment=One click, any media: video, audio, photos, camera RAW - local, NAS or cloud
+Exec=playanything %U
+TryExec=playanything
+Icon=playanything
+Terminal=false
+Categories=AudioVideo;Audio;Video;Player;Graphics;Viewer;
+Keywords=player;video;audio;photo;raw;mkv;mp4;flac;hdr;10bit;nas;synology;
+StartupNotify=false
+Actions=append;
+MimeType=video/x-matroska;video/mp4;video/quicktime;audio/flac;image/jpeg;image/x-sony-arw;
+
+[Desktop Action append]
+Name=Add to PlayAnything playlist
+Exec=playanything --append %U
