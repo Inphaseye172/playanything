@@ -21,7 +21,9 @@ case "$(uname -s)" in
       fi
     fi
     n=0
-    for e in $("$EXE" extensions); do duti -s com.playanything.app ".$e" all 2>/dev/null && n=$((n+1)) || true; done
+    for e in $("$EXE" extensions); do
+      if duti -s com.playanything.app ".$e" all 2>/dev/null; then n=$((n+1)); fi
+    done
     echo "PlayAnything is now the default for $n extensions."
     ;;
   Linux)
