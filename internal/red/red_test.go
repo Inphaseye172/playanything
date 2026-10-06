@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -71,5 +72,32 @@ func TestDetectDoesNotPanic(t *testing.T) {
 	_ = tools
 	if Detect("/nope/REDline").REDline != "" {
 		t.Fatal("bad override accepted")
+	}
+}
+
+func TestRenderProxyFallbackAndErrorTail(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a shell script")
+	}
+	dir := t.TempDir()
+	in := filepath.Join(dir, "clip.R3D")
+	os.WriteFile(in, []byte("RED2"), 0o644)
+	cache := filepath.Join(dir, "cache")
+	// Fails for --format 11, succeeds for --format 12 (second-level fallback).
+	fake := filepath.Join(dir, "REDline")
+	script := "#!/bin/sh\nfmt=; while [ $# -gt 0 ]; do case \"$1\" in --format) fmt=$2; shift;; --o) BASE=$2; shift;; --outDir) DIR=$2; shift;; esac; shift; done\nif [ \"$fmt\" != 12 ]; then echo \"Error: unsupported output format $fmt\"; exit 1; fi\nprintf moov > \"$DIR/$BASE.mxf\"\n"
+	os.WriteFile(fake, []byte(script), 0o755)
+	out, err := RenderProxy(context.Background(), fake, "--i {input} --o {outbase} --outDir {outdir} --format 11", cache, in, nil)
+	if err != nil || filepath.Ext(out) != ".mxf" {
+		t.Fatalf("fallback: out=%s err=%v", out, err)
+	}
+	// Always failing: the error must carry REDline's words and the log path.
+	always := filepath.Join(dir, "REDline2")
+	os.WriteFile(always, []byte("#!/bin/sh\necho 'License check failed: no RED SDK license'\nexit 1\n"), 0o755)
+	in2 := filepath.Join(dir, "clip2.R3D")
+	os.WriteFile(in2, []byte("RED2"), 0o644)
+	_, err = RenderProxy(context.Background(), always, "", cache, in2, nil)
+	if err == nil || !strings.Contains(err.Error(), "License check failed") || !strings.Contains(err.Error(), ".log") {
+		t.Fatalf("error should quote REDline and the log: %v", err)
 	}
 }

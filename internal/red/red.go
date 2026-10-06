@@ -176,33 +176,103 @@ func ExpandArgs(template, input, outbase, outdir string) []string {
 // Progress receives REDline's output lines as they arrive.
 type Progress func(line string)
 
+// FallbackTemplates are tried in order after the configured template fails.
+// REDline's output formats differ between versions and platforms (QuickTime
+// wrapping needs QuickTime, ProRes direct export arrived later, DNx is MXF),
+// so the first one that produces a file wins and is cached.
+var FallbackTemplates = []string{
+	"--i {input} --o {outbase} --outDir {outdir} --format 201 --PRcodec 1 --res 4", // Apple ProRes direct (newer REDline)
+	"--i {input} --o {outbase} --outDir {outdir} --format 201 --res 4",
+	"--i {input} --o {outbase} --outDir {outdir} --format 12 --res 4",             // Avid DNxHD/HR (MXF)
+	"--i {input} --o {outbase} --outDir {outdir} --format 11 --QTcodec 2 --res 4", // QuickTime wrapper (needs QT)
+	"--i {input} --o {outbase} --outDir {outdir} --format 11 --res 4",
+}
+
 // RenderProxy runs REDline to create a proxy for input in cacheDir and returns
-// the rendered file. The template comes from config.json (redline_args).
+// the rendered file. The configured template (redline_args) is tried first,
+// then FallbackTemplates. All attempts are appended to one log next to the
+// proxy; the error carries REDline's last lines so the user sees why.
 func RenderProxy(ctx context.Context, redline, template, cacheDir, input string, progress Progress) (string, error) {
+	tried := map[string]bool{}
+	var attempts []string
+	if strings.TrimSpace(template) != "" {
+		attempts = append(attempts, template)
+	}
+	for _, t := range FallbackTemplates {
+		attempts = append(attempts, t)
+	}
+	var lastErr error
+	var lastTail string
+	n := 0
+	for _, t := range attempts {
+		if tried[t] {
+			continue
+		}
+		tried[t] = true
+		n++
+		if progress != nil {
+			progress(fmt.Sprintf("trying: REDline %s", strings.ReplaceAll(t, "{input}", filepath.Base(input))))
+		}
+		out, tail, err := renderOnce(ctx, redline, t, cacheDir, input, progress, n > 1)
+		if err == nil {
+			return out, nil
+		}
+		lastErr, lastTail = err, tail
+		if ctx.Err() != nil {
+			break
+		}
+	}
+	logPath := ""
+	if base, err := ProxyPath(cacheDir, input); err == nil {
+		logPath = base + ".log"
+	}
+	msg := fmt.Sprintf("REDline could not render a proxy (%d command variants tried; last: %v).", n, lastErr)
+	if lastTail != "" {
+		msg += "\n\nREDline said:\n" + lastTail
+	}
+	msg += "\n\nFull log: " + logPath +
+		"\nRun `REDline --help` to see the formats your version supports, then set your own command with:" +
+		"\n  playanything config redline_args \"--i {input} --o {outbase} --outDir {outdir} --format <n> --res 4\""
+	return "", errors.New(msg)
+}
+
+// renderOnce runs one REDline command line; tail returns its last output lines.
+func renderOnce(ctx context.Context, redline, template, cacheDir, input string, progress Progress, appendLog bool) (out, tail string, err error) {
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
-		return "", err
+		return "", "", err
 	}
 	outbasePath, err := ProxyPath(cacheDir, input)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	outbase := filepath.Base(outbasePath)
 	args := ExpandArgs(template, input, outbase, cacheDir)
 	cmd := exec.CommandContext(ctx, redline, args...)
 	logPath := outbasePath + ".log"
-	logf, _ := os.Create(logPath)
+	flags := os.O_CREATE | os.O_WRONLY | os.O_TRUNC
+	if appendLog {
+		flags = os.O_CREATE | os.O_WRONLY | os.O_APPEND
+	}
+	logf, _ := os.OpenFile(logPath, flags, 0o644)
 	if logf != nil {
 		defer logf.Close()
-		fmt.Fprintf(logf, "$ %s %s\n", redline, strings.Join(args, " "))
+		fmt.Fprintf(logf, "\n$ %s %s\n", redline, strings.Join(args, " "))
+	}
+	var lines []string
+	keep := func(l string) {
+		lines = append(lines, l)
+		if len(lines) > 12 {
+			lines = lines[1:]
+		}
 	}
 	pr, pw, err := os.Pipe()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	cmd.Stdout, cmd.Stderr = pw, pw
 	if err := cmd.Start(); err != nil {
 		pw.Close()
-		return "", fmt.Errorf("start REDline: %w", err)
+		return "", "", fmt.Errorf("start REDline: %w", err)
 	}
 	pw.Close()
 	done := make(chan struct{})
@@ -219,8 +289,11 @@ func RenderProxy(ctx context.Context, redline, template, cacheDir, input string,
 				}
 				for _, b := range chunk {
 					if b == '\n' || b == '\r' {
-						if acc.Len() > 0 && progress != nil {
-							progress(acc.String())
+						if acc.Len() > 0 {
+							keep(acc.String())
+							if progress != nil {
+								progress(acc.String())
+							}
 						}
 						acc.Reset()
 					} else {
@@ -229,8 +302,11 @@ func RenderProxy(ctx context.Context, redline, template, cacheDir, input string,
 				}
 			}
 			if err != nil {
-				if acc.Len() > 0 && progress != nil {
-					progress(acc.String())
+				if acc.Len() > 0 {
+					keep(acc.String())
+					if progress != nil {
+						progress(acc.String())
+					}
 				}
 				return
 			}
@@ -238,14 +314,15 @@ func RenderProxy(ctx context.Context, redline, template, cacheDir, input string,
 	}()
 	waitErr := cmd.Wait()
 	<-done
-	out := FindProxy(cacheDir, input)
+	tail = strings.Join(lines, "\n")
+	out = FindProxy(cacheDir, input)
 	if waitErr != nil && out == "" {
-		return "", fmt.Errorf("REDline failed (%v); see %s", waitErr, logPath)
+		return "", tail, fmt.Errorf("exit status: %v", waitErr)
 	}
 	if out == "" {
-		return "", errors.New("REDline finished but produced no output; see " + logPath)
+		return "", tail, errors.New("finished without producing a file")
 	}
-	return out, nil
+	return out, tail, nil
 }
 
 // OpenWith launches a GUI application (REDCINE-X PRO, Blackmagic RAW Player)

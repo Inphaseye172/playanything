@@ -470,7 +470,7 @@ func (p *Player) cinemaRaw(ctx context.Context, f string) (string, error) {
 				p.ShowText("REDline: "+name+"\n"+line, 5000)
 			})
 			if err != nil {
-				p.ShowText("REDline failed: "+err.Error(), 10000)
+				p.ShowText("Could not render an R3D proxy — see the message box", 10000)
 				return "", err
 			}
 			return proxy, nil
