@@ -59,7 +59,7 @@ func TestRenderProxyWithFakeREDline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if filepath.Ext(out) != ".mov" || len(lines) != 2 || lines[1] != "Decoding 100%" {
+	if filepath.Ext(out) != ".mov" || len(lines) != 3 || lines[2] != "Decoding 100%" {
 		t.Fatalf("out=%s lines=%q", out, lines)
 	}
 	if FindProxy(cache, in) != out {
